@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap"
+      rel="stylesheet"
+    />
+     <link rel="icon" type="image/png" href="../images/favicon.ico" />
+    <style>
+      body {
+        margin: 0;
+        font-family: "Manrope", sans-serif !important;
+        display: flex;
+        justify-content: center;
+        /* align-items: center; */
+        height: 100vh;
+      }
+
+      p {
+        color: #404039 !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+      }
+
+      .bg-white {
+        background-color: #fef6ec;
+        padding: 2rem 3rem;
+        width: 33rem;
+        line-height: 1.6;
+        /* border-radius: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); */
+        text-align: left;
+      }
+
+      .bg-white h2 {
+        color: #403f0d;
+        margin-bottom: 1rem;
+        font-weight: 700;
+      }
+
+      .bg-white a {
+        color: #df8673 !important;
+        text-decoration: none;
+        font-weight: bold;
+      }
+
+      .bg-white a:hover {
+        text-decoration: underline;
+      }
+      
+      .welcome-img {
+        width: 33rem;
+        /* margin-bottom: 1.5rem; */
+      }
+
+      .footer {
+        margin-top: 2rem;
+        font-size: 12px;
+        color: #7d7d6d;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <div class="bg-white">
+        <img
+          src="../images/welcome.png"
+          alt="Welcome"
+          class="welcome-img"
+        />
+        <h2 style="text-align: center !important">Welcome, [User’s Name]!</h2>
+        <p>
+          You’ve successfully logged in to your account. We're excited to have
+          you back!
+        </p>
+        <p>
+          Head over to your <a href="/dashboard">Dashboard</a> to view your
+          updates, manage your tickets, or explore new features.
+        </p>
+        <p>
+          We appreciate your patience and will keep you updated on the
+          progress.<br />
+          If you have any urgent concerns, feel free to contact us directly at
+          <span class="phone">+91-9696352245</span>.
+        </p>
+
+        <p>
+          Best regards,<br />
+          [Your Name]<br />
+          [Your Position]<br />
+          [Company/Organization Name]
+        </p>
+      </div>
+      <div
+        style="background-color: #403f0d !important; padding: 1rem !important"
+      ></div>
+    </div>
+  </body>
+</html>

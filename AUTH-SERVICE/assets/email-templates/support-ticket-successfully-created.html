@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Support Ticket Successfully Created</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Noto+Sans:ital,wght@0,100..900;1,100..900&family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Roboto:ital,wght@0,100..900;1,100..900&family=Sen:wght@400..800&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap"
+      rel="stylesheet"
+    />
+     <link rel="icon" type="image/png" href="../images/favicon.ico" />
+    <style>
+      .manrope {
+        font-family: "Manrope", sans-serif;
+        font-optical-sizing: auto;
+
+        font-style: normal;
+      }
+      body {
+        margin: 0;
+        font-family: "Manrope", sans-serif !important;
+        /* background-color: #f5f5f5; */
+        display: flex;
+        justify-content: center;
+        /* align-items: center; */
+        height: 100vh;
+      }
+      p {
+        color: #404039 !important;
+        font-size: 12.5px !important;
+      }
+      .image-container {
+        position: relative;
+        display: inline-block;
+      }
+
+      .email-img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+      }
+
+      .ticket-img {
+        position: absolute;
+        top: 3rem;
+        left: 50%;
+        transform: translateX(-50%);
+        width: auto;
+        max-width: 80%;
+        z-index: 2;
+      }
+
+      .bg-white {
+        position: absolute;
+        top: 9.5rem; /* Adjust as per your layout */
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #fef6ec;
+        padding: 2rem 3rem;
+        /* border-radius: 1rem; */
+        width: 28rem;
+        max-width: 500px;
+        font-size: 1rem;
+        line-height: 1.6;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        z-index: 1;
+      }
+
+      .bg-white strong {
+        color: #000;
+      }
+
+      .bg-white a {
+        color: #df8673 !important;
+        text-decoration: none;
+      }
+
+      .bg-white a:hover {
+        text-decoration: underline;
+      }
+
+      .bg-white .phone {
+        font-weight: bold;
+        color: #404039;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="image-container">
+      <img
+        class="email-img"
+        src="../images/email-bg.svg"
+        alt="Email Background"
+      />
+      <img
+        class="ticket-img"
+        src="../images/ticket.svg"
+        alt="Ticket Overlay"
+      />
+
+      <div class="bg-white">
+        <br />
+        <br />
+        <br />
+        <br />
+        <p>
+          Subject: Support Ticket Created –
+          <span style="font-weight: 800 !important">[Ticket #123456]</span
+          ><br />
+          Dear [User’s Name],
+        </p>
+
+        <p>
+          We hope you’re doing well.<br />
+          This is to inform you that a support ticket has been successfully
+          created on your behalf. Our team is currently reviewing your request
+          and will get back to you as soon as possible.
+        </p>
+
+        <p>
+          Ticket Details:<br />
+          • Ticket Number: [#123456]<br />
+          • Subject: [Brief summary of the issue/request]<br />
+          • Date Created: [Insert Date]<br />
+          • Status: Open / In Progress
+        </p>
+
+        <p>
+          You can track the progress of your ticket or add additional
+          information by replying to this email or accessing your support portal
+          (<a
+            href=""
+            style="
+              text-decoration: underline !important;
+              font-weight: 500 !important;
+            "
+            >Link if any</a
+          >).
+        </p>
+
+        <p>
+          We appreciate your patience and will keep you updated on the
+          progress.<br />
+          If you have any urgent concerns, feel free to contact us directly at
+          <span class="phone">+91-9696352245</span>.
+        </p>
+
+        <p>
+          Best regards,<br />
+          [Your Name]<br />
+          [Your Position]<br />
+          [Company/Organization Name]
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

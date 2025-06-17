@@ -1,0 +1,40 @@
+# ---------------------
+# API GATEWAY
+# ---------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-test-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-test
+  template:
+    metadata:
+      labels:
+        app: auth-test
+    spec:
+      containers:
+        - name: auth-github-container
+          image: 324048504064.dkr.ecr.eu-north-1.amazonaws.com/auth-github:v1
+          ports:
+            - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-test-service
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    # service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    # service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"
+spec:
+  selector:
+    app: auth-test
+  type: LoadBalancer
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 3000

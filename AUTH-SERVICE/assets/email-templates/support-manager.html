@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome Support Manager</title>
+      <link rel="icon" type="image/png" href="./assets./images/favicon.ico" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        font-family: "Manrope", sans-serif !important;
+      
+        display: flex;
+        justify-content: center;
+        /* padding: 40px 0; */
+      }
+
+      .container {
+        background-color: #fef6ec;
+        padding: 2rem 3rem;
+        width: 33rem;
+        /* box-shadow: 0 0 10px rgba(0, 0, 0, 0.06); */
+        text-align: left;
+        line-height: 1.6;
+      }
+
+      .container h2 {
+        color: #403f0d;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 1rem;
+      }
+
+      p {
+          color: #404039 !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+      }
+
+      a {
+        color: #df8673;
+        font-weight: bold;
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .welcome-img {
+         width: 33rem;
+      }
+
+      .footer {
+        margin-top: 2rem;
+        font-size: 12px;
+        color: #7d7d6d;
+      }
+
+      .btn-login {
+        display: inline-block;
+        margin-top: 1rem;
+        background-color: #403f0d;
+        color: #fff;
+        padding: 10px 18px;
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .btn-login:hover {
+        background-color: #2f2e09;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+    <div class="container">
+      <img
+        src="../images/support-manager.png"
+        alt="Welcome"
+        class="welcome-img"
+      />
+      <h2>Welcome Aboard, {{username}}!</h2>
+      <p>
+        Your Support Manager account has been successfully created on our platform.
+      </p>
+      <p>
+        You now have access to the support dashboard, where you can manage tickets, respond to users, and help keep our community running smoothly.
+      </p>
+      <p>
+        To get started, click the button below to log in:
+      </p>
+      <div style="background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 5px; padding: 15px; margin: 15px 0;">
+        <p style="margin: 0; font-weight: 600; color: #403f0d !important;">Your Login Credentials:</p>
+        <p style="margin: 5px 0 0 0;"><strong>Username:</strong> {{username}}</p>
+        <p style="margin: 5px 0 0 0;"><strong>Password:</strong> {{password}}</p>
+      </div>
+      <p style="text-align: center;">
+        <a href="{{loginLink}}" class="btn-login">Log In to Dashboard</a>
+      </p>
+      <p>
+          We appreciate your patience and will keep you updated on the
+          progress.<br />
+          If you have any urgent concerns, feel free to contact us directly at
+          <span class="phone">+91-9696352245</span>.
+        </p>
+
+        <p>
+          Best regards,<br />
+          [Your Name]<br />
+          [Your Position]<br />
+          [Company/Organization Name]
+        </p>
+    </div>
+      <div
+        style="background-color: #403f0d !important; padding: 1rem !important"
+      ></div>
+  </body>
+</html>
