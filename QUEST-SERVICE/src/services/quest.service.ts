@@ -10,7 +10,12 @@ import {
 } from "@utils/graphql.queries";
 import { config } from "@config/server.config";
 import axios from "axios";
-import { UnauthorizedError } from "@utils/errors";
+import {
+  UnauthorizedError,
+  InternalServerError,
+  NotFoundError,
+} from "@utils/errors";
+import { ValidationError } from "@utils/errors/validation.error";
 
 interface UserResponse {
   status: boolean;
@@ -48,453 +53,267 @@ export class QuestService {
     this.questRepository = new QuestRepository();
   }
 
-  // async syncTentsAndQuests() {
-  //   try {
-  //     const projectId = process.env.AIRLYFT_PROJECT_ID;
-
-  //     if (!projectId) {
-  //       throw new Error("Project ID not configured in environment");
-  //     }
-
-  //     // Fetch campaigns (tents)
-  //     const campaignVariables = {
-  //       pagination: {
-  //         skip: 0,
-  //         take: 100,
-  //       },
-  //       where: {
-  //         projectId: projectId,
-  //         state: ["ONGOING"],
-  //         visibility: ["PUBLIC"],
-  //       },
-  //     };
-
-  //     const campaignResponse = await executeGraphQLQuery(
-  //       FETCH_CAMPAIGNS_QUERY,
-  //       campaignVariables,
-  //       false
-  //     );
-
-  //     if (campaignResponse?.errors) {
-  //       throw new Error(
-  //         `Failed to fetch campaigns: ${campaignResponse.errors}`
-  //       );
-  //     }
-
-  //     const campaigns = campaignResponse?.data?.exploreEvents?.data || [];
-  //     const syncResults = {
-  //       tentsCreated: 0,
-  //       tentsUpdated: 0,
-  //       questsCreated: 0,
-  //       questsUpdated: 0,
-  //       errors: [] as string[],
-  //     };
-
-  //     // Process each campaign
-  //     for (const campaign of campaigns) {
-  //       try {
-  //         // Check if tent already exists
-  //         let existingTent = await this.questRepository.findTentByAirlyftId(
-  //           campaign.id
-  //         );
-
-  //         const tentData = {
-  //           tentName: campaign.publicLink || campaign.title,
-  //           title: campaign.title,
-  //           description: campaign.description || null,
-  //           airlyftId: campaign.id,
-  //           startTime: campaign.startTime ? new Date(campaign.startTime) : null,
-  //           endTime: campaign.endTime ? new Date(campaign.endTime) : null,
-  //           publicLink: campaign.publicLink || null,
-  //           bannerUrl: campaign.bannerUrl || null,
-  //           state: campaign.state || "DRAFT",
-  //           settlementFiles: campaign.settlementFiles || null,
-  //           settledAt: campaign.settledAt ? new Date(campaign.settledAt) : null,
-  //           eventType: campaign.eventType || "CAMPAIGN",
-  //           visibilityType: campaign.visibility || "PUBLIC",
-  //           mode: campaign.mode || null,
-  //           summary: {
-  //             totalParticipants: campaign.summary?.totalParticipants || 0,
-  //             totalPoints: campaign.summary?.totalPoints || 0,
-  //             totalPointsEarned: campaign.summary?.totalPointsEarned || 0,
-  //             totalTaskParticipation:
-  //               campaign.summary?.totalTaskParticipation || 0,
-  //             totalTasks: campaign.summary?.totalTasks || 0,
-  //             totalXP: campaign.summary?.totalXP || 0,
-  //           },
-  //           rewardTitle: campaign.rewardTitle || null,
-  //           rewardSubtitle: campaign.rewardSubtitle || null,
-  //           ipProtect: campaign.ipProtect || null,
-  //           leaderboard: campaign.leaderboard || "NONE",
-  //           seasonId: campaign.seasonId || null,
-  //           tags: campaign.tags || null,
-  //         };
-
-  //         if (!existingTent) {
-  //           existingTent = await this.questRepository.createTent(tentData);
-  //           syncResults.tentsCreated++;
-  //         } else {
-  //           // Update existing tent
-  //           Object.assign(existingTent, tentData);
-  //           await existingTent.save();
-  //           syncResults.tentsUpdated++;
-  //         }
-
-  //         // Fetch and process quests for this tent
-  //         const questVariables = {
-  //           eventId: campaign.id,
-  //         };
-
-  //         const questResponse = await executeGraphQLQuery(
-  //           FETCH_QUESTS_QUERY,
-  //           questVariables,
-  //           false
-  //         );
-
-  //         if (questResponse?.data?.pTasks) {
-  //           const questIds: Types.ObjectId[] = [];
-
-  //           for (const task of questResponse.data.pTasks) {
-  //             try {
-  //               let existingQuest =
-  //                 await this.questRepository.findQuestByAirlyftId(task.id);
-
-  //               const questData = {
-  //                 tentId: existingTent._id,
-  //                 title: task.title,
-  //                 description: task.description || null,
-  //                 xpValue: task.xp || 0,
-  //                 airlyftId: task.id,
-  //                 order: task.order || 1,
-  //                 points: task.points || 0,
-  //                 iconUrl: task.iconUrl || null,
-  //                 appType: task.appType || null,
-  //                 taskType: task.taskType || null,
-  //                 parentId: task.parentId || null,
-  //                 frequency: task.frequency || "NONE",
-  //                 xp: task.xp || 0,
-  //                 appKey: task.appKey || null,
-  //                 taskKey: task.taskKey || null,
-  //                 verify: task.verify || "AUTO",
-  //                 subTaskStats: {
-  //                   count: task.subTaskStats?.count || null,
-  //                   totalPoints: task.subTaskStats?.totalPoints || null,
-  //                   totalXp: task.subTaskStats?.totalXp || null,
-  //                 },
-  //                 participantCount: task.participantCount || 0,
-  //                 guardConfig: task.guardConfig || null,
-  //                 info: task.info || null,
-  //                 isCompleted: task.isCompleted || false,
-  //                 locked: task.locked || false,
-  //               };
-
-  //               if (!existingQuest) {
-  //                 existingQuest = await this.questRepository.createQuest(
-  //                   questData
-  //                 );
-  //                 syncResults.questsCreated++;
-  //               } else {
-  //                 // Update existing quest
-  //                 Object.assign(existingQuest, questData);
-  //                 await existingQuest.save();
-  //                 syncResults.questsUpdated++;
-  //               }
-
-  //               questIds.push(existingQuest._id);
-  //             } catch (questError: any) {
-  //               syncResults.errors.push(
-  //                 `Error processing quest ${task.id}: ${questError.message}`
-  //               );
-  //             }
-  //           }
-
-  //           // Update tent with quest references
-  //           if (questIds.length > 0) {
-  //             existingTent.questIds = questIds;
-  //             await existingTent.save();
-  //           }
-  //         }
-  //       } catch (tentError: any) {
-  //         syncResults.errors.push(
-  //           `Error processing tent ${campaign.id}: ${tentError.message}`
-  //         );
-  //       }
-  //     }
-
-  //     return syncResults;
-  //   } catch (error: any) {
-  //     throw new Error(`Sync failed: ${error.message}`);
-  //   }
-  // }
-
   async syncTentsAndQuests() {
-    try {
-      const projectId = process.env.AIRLYFT_PROJECT_ID;
+    const projectId = process.env.AIRLYFT_PROJECT_ID;
 
-      if (!projectId) {
-        throw new Error("Project ID not configured in environment");
-      }
-
-      // Fetch campaigns (tents)
-      const campaignVariables = {
-        pagination: {
-          skip: 0,
-          take: 100,
-        },
-        where: {
-          projectId: projectId,
-          state: ["ONGOING"],
-          visibility: ["PUBLIC"],
-        },
-      };
-
-      const campaignResponse = await executeGraphQLQuery(
-        FETCH_CAMPAIGNS_QUERY,
-        campaignVariables,
-        false
-      );
-
-      if (campaignResponse?.errors) {
-        throw new Error(
-          `Failed to fetch campaigns: ${campaignResponse.errors}`
-        );
-      }
-
-      const campaigns = campaignResponse?.data?.exploreEvents?.data || [];
-      const syncResults = {
-        tentsCreated: 0,
-        tentsUpdated: 0,
-        questsCreated: 0,
-        questsUpdated: 0,
-        errors: [] as string[],
-      };
-
-      // Get tent types
-      const socialTentType = await this.questRepository.findTentTypeByName(
-        "Social"
-      );
-      const educationalTentType = await this.questRepository.findTentTypeByName(
-        "Educational"
-      );
-
-      if (!socialTentType || !educationalTentType) {
-        throw new Error(
-          "Required tent types (Social/Educational) not found in database"
-        );
-      }
-
-      // Store quest references for prerequisite mapping
-      const questsByTentAndOrder: Map<string, Types.ObjectId> = new Map();
-
-      // Process each campaign
-      for (const campaign of campaigns) {
-        try {
-          // Check if tent already exists
-          let existingTent = await this.questRepository.findTentByEventId(
-            campaign.id
-          );
-
-          // Determine tent type based on title
-          let tentTypeId: Types.ObjectId;
-          if (campaign.title.toLowerCase().includes("social")) {
-            tentTypeId = socialTentType._id;
-          } else if (campaign.title.toLowerCase().includes("educational")) {
-            tentTypeId = educationalTentType._id;
-          } else {
-            // Default to Social if no specific type found
-            tentTypeId = socialTentType._id;
-          }
-
-          const tentData = {
-            tentName: campaign.publicLink || campaign.title,
-            title: campaign.title,
-            description: campaign.description || null,
-            eventId: campaign.id,
-            startTime: campaign.startTime ? new Date(campaign.startTime) : null,
-            endTime: campaign.endTime ? new Date(campaign.endTime) : null,
-            publicLink: campaign.publicLink || null,
-            bannerUrl: campaign.bannerUrl || null,
-            state: campaign.state || "DRAFT",
-            settlementFiles: campaign.settlementFiles || null,
-            settledAt: campaign.settledAt ? new Date(campaign.settledAt) : null,
-            eventType: campaign.eventType || "CAMPAIGN",
-            visibilityType: campaign.visibility || "PUBLIC",
-            mode: campaign.mode || null,
-            tentType: tentTypeId,
-            summary: {
-              totalParticipants: campaign.summary?.totalParticipants || 0,
-              totalPoints: campaign.summary?.totalPoints || 0,
-              totalPointsEarned: campaign.summary?.totalPointsEarned || 0,
-              totalTaskParticipation:
-                campaign.summary?.totalTaskParticipation || 0,
-              totalTasks: campaign.summary?.totalTasks || 0,
-              totalXP: campaign.summary?.totalXP || 0,
-            },
-            rewardTitle: campaign.rewardTitle || null,
-            rewardSubtitle: campaign.rewardSubtitle || null,
-            ipProtect: campaign.ipProtect || null,
-            leaderboard: campaign.leaderboard || "NONE",
-            seasonId: campaign.seasonId || null,
-            tags: campaign.tags || null,
-          };
-
-          if (!existingTent) {
-            existingTent = await this.questRepository.createTent(tentData);
-            syncResults.tentsCreated++;
-          } else {
-            // Update existing tent
-            Object.assign(existingTent, tentData);
-            await existingTent.save();
-            syncResults.tentsUpdated++;
-          }
-
-          // Fetch and process quests for this tent
-          const questVariables = {
-            eventId: campaign.id,
-          };
-
-          const questResponse = await executeGraphQLQuery(
-            FETCH_QUESTS_QUERY,
-            questVariables,
-            false
-          );
-
-          if (questResponse?.data?.pTasks) {
-            const questIds: Types.ObjectId[] = [];
-
-            for (const task of questResponse.data.pTasks) {
-              try {
-                let existingQuest =
-                  await this.questRepository.findQuestByTaskId(task.id);
-
-                const questData = {
-                  tentId: existingTent._id,
-                  title: task.title,
-                  description: task.description || null,
-                  xpValue: task.xp || 0,
-                  taskId: task.id,
-                  order: task.order || 1,
-                  points: task.points || 0,
-                  iconUrl: task.iconUrl || null,
-                  appType: task.appType || null,
-                  taskType: task.taskType || null,
-                  parentId: task.parentId || null,
-                  frequency: task.frequency || "NONE",
-                  xp: task.xp || 0,
-                  appKey: task.appKey || null,
-                  taskKey: task.taskKey || null,
-                  verify: task.verify || "AUTO",
-                  subTaskStats: {
-                    count: task.subTaskStats?.count || null,
-                    totalPoints: task.subTaskStats?.totalPoints || null,
-                    totalXp: task.subTaskStats?.totalXp || null,
-                  },
-                  participantCount: task.participantCount || 0,
-                  guardConfig: task.guardConfig || null,
-                  info: task.info || null,
-                  prerequisites: [], // Will be set later based on logic
-                };
-
-                if (!existingQuest) {
-                  existingQuest = await this.questRepository.createQuest(
-                    questData
-                  );
-                  syncResults.questsCreated++;
-                } else {
-                  // Update existing quest
-                  Object.assign(existingQuest, questData);
-                  await existingQuest.save();
-                  syncResults.questsUpdated++;
-                }
-
-                // Store quest reference for prerequisite mapping
-                const tentTypeName = tentTypeId.equals(socialTentType._id)
-                  ? "Social"
-                  : "Educational";
-                const questKey = `${tentTypeName}_Quest_${task.order || 1}`;
-                questsByTentAndOrder.set(questKey, existingQuest._id);
-
-                questIds.push(existingQuest._id);
-              } catch (questError: any) {
-                syncResults.errors.push(
-                  `Error processing quest ${task.id}: ${questError.message}`
-                );
-              }
-            }
-
-            // Update tent with quest references
-            if (questIds.length > 0) {
-              existingTent.questIds = questIds;
-              await existingTent.save();
-            }
-          }
-        } catch (tentError: any) {
-          syncResults.errors.push(
-            `Error processing tent ${campaign.id}: ${tentError.message}`
-          );
-        }
-      }
-
-      // Now set prerequisites based on the logic
-      await this.setQuestPrerequisites(questsByTentAndOrder);
-
-      return syncResults;
-    } catch (error: any) {
-      throw new Error(`Sync failed: ${error.message}`);
+    if (!projectId) {
+      throw new InternalServerError("Project ID not configured in environment");
     }
+
+    // Fetch campaigns (tents)
+    const campaignVariables = {
+      pagination: {
+        skip: 0,
+        take: 100,
+      },
+      where: {
+        projectId: projectId,
+        state: ["ONGOING"],
+        visibility: ["PUBLIC"],
+      },
+    };
+
+    const campaignResponse = await executeGraphQLQuery(
+      FETCH_CAMPAIGNS_QUERY,
+      campaignVariables,
+      false
+    );
+
+    if (campaignResponse?.errors) {
+      throw new InternalServerError(
+        `Failed to fetch campaigns: ${JSON.stringify(campaignResponse.errors)}`
+      );
+    }
+
+    const campaigns = campaignResponse?.data?.exploreEvents?.data || [];
+    const syncResults = {
+      tentsCreated: 0,
+      tentsUpdated: 0,
+      questsCreated: 0,
+      questsUpdated: 0,
+      errors: [] as string[],
+    };
+
+    // Get tent types
+    const socialTentType = await this.questRepository.findTentTypeByName(
+      "Social"
+    );
+    const educationalTentType = await this.questRepository.findTentTypeByName(
+      "Educational"
+    );
+
+    if (!socialTentType || !educationalTentType) {
+      throw new InternalServerError(
+        "Required tent types (Social/Educational) not found in database"
+      );
+    }
+
+    // Store quest references for prerequisite mapping
+    const questsByTentAndOrder: Map<string, Types.ObjectId> = new Map();
+
+    // Process each campaign
+    for (const campaign of campaigns) {
+      try {
+        // Check if tent already exists
+        let existingTent = await this.questRepository.findTentByEventId(
+          campaign.id
+        );
+
+        // Determine tent type based on title
+        let tentTypeId: Types.ObjectId;
+        if (campaign.title.toLowerCase().includes("social")) {
+          tentTypeId = socialTentType._id;
+        } else if (campaign.title.toLowerCase().includes("educational")) {
+          tentTypeId = educationalTentType._id;
+        } else {
+          // Default to Social if no specific type found
+          tentTypeId = socialTentType._id;
+        }
+
+        const tentData = {
+          tentName: campaign.publicLink || campaign.title,
+          title: campaign.title,
+          description: campaign.description || null,
+          eventId: campaign.id,
+          startTime: campaign.startTime ? new Date(campaign.startTime) : null,
+          endTime: campaign.endTime ? new Date(campaign.endTime) : null,
+          publicLink: campaign.publicLink || null,
+          bannerUrl: campaign.bannerUrl || null,
+          state: campaign.state || "DRAFT",
+          settlementFiles: campaign.settlementFiles || null,
+          settledAt: campaign.settledAt ? new Date(campaign.settledAt) : null,
+          eventType: campaign.eventType || "CAMPAIGN",
+          visibilityType: campaign.visibility || "PUBLIC",
+          mode: campaign.mode || null,
+          tentType: tentTypeId,
+          summary: {
+            totalParticipants: campaign.summary?.totalParticipants || 0,
+            totalPoints: campaign.summary?.totalPoints || 0,
+            totalPointsEarned: campaign.summary?.totalPointsEarned || 0,
+            totalTaskParticipation:
+              campaign.summary?.totalTaskParticipation || 0,
+            totalTasks: campaign.summary?.totalTasks || 0,
+            totalXP: campaign.summary?.totalXP || 0,
+          },
+          rewardTitle: campaign.rewardTitle || null,
+          rewardSubtitle: campaign.rewardSubtitle || null,
+          ipProtect: campaign.ipProtect || null,
+          leaderboard: campaign.leaderboard || "NONE",
+          seasonId: campaign.seasonId || null,
+          tags: campaign.tags || null,
+        };
+
+        if (!existingTent) {
+          existingTent = await this.questRepository.createTent(tentData);
+          syncResults.tentsCreated++;
+        } else {
+          // Update existing tent
+          Object.assign(existingTent, tentData);
+          await existingTent.save();
+          syncResults.tentsUpdated++;
+        }
+
+        // Fetch and process quests for this tent
+        const questVariables = {
+          eventId: campaign.id,
+        };
+
+        const questResponse = await executeGraphQLQuery(
+          FETCH_QUESTS_QUERY,
+          questVariables,
+          false
+        );
+
+        if (questResponse?.data?.pTasks) {
+          const questIds: Types.ObjectId[] = [];
+
+          for (const task of questResponse.data.pTasks) {
+            try {
+              let existingQuest = await this.questRepository.findQuestByTaskId(
+                task.id
+              );
+
+              const questData = {
+                tentId: existingTent._id,
+                title: task.title,
+                description: task.description || null,
+                xpValue: task.xp || 0,
+                taskId: task.id,
+                order: task.order || 1,
+                points: task.points || 0,
+                iconUrl: task.iconUrl || null,
+                appType: task.appType || null,
+                taskType: task.taskType || null,
+                parentId: task.parentId || null,
+                frequency: task.frequency || "NONE",
+                xp: task.xp || 0,
+                appKey: task.appKey || null,
+                taskKey: task.taskKey || null,
+                verify: task.verify || "AUTO",
+                subTaskStats: {
+                  count: task.subTaskStats?.count || null,
+                  totalPoints: task.subTaskStats?.totalPoints || null,
+                  totalXp: task.subTaskStats?.totalXp || null,
+                },
+                participantCount: task.participantCount || 0,
+                guardConfig: task.guardConfig || null,
+                info: task.info || null,
+                prerequisites: [], // Will be set later based on logic
+              };
+
+              if (!existingQuest) {
+                existingQuest = await this.questRepository.createQuest(
+                  questData
+                );
+                syncResults.questsCreated++;
+              } else {
+                // Update existing quest
+                Object.assign(existingQuest, questData);
+                await existingQuest.save();
+                syncResults.questsUpdated++;
+              }
+
+              // Store quest reference for prerequisite mapping
+              const tentTypeName = tentTypeId.equals(socialTentType._id)
+                ? "Social"
+                : "Educational";
+              const questKey = `${tentTypeName}_Quest_${task.order || 1}`;
+              questsByTentAndOrder.set(questKey, existingQuest._id);
+
+              questIds.push(existingQuest._id);
+            } catch (questError: any) {
+              syncResults.errors.push(
+                `Error processing quest ${task.id}: ${questError.message}`
+              );
+            }
+          }
+
+          // Update tent with quest references
+          if (questIds.length > 0) {
+            existingTent.questIds = questIds;
+            await existingTent.save();
+          }
+        }
+      } catch (tentError: any) {
+        syncResults.errors.push(
+          `Error processing tent ${campaign.id}: ${tentError.message}`
+        );
+      }
+    }
+
+    // Now set prerequisites based on the logic
+    await this.setQuestPrerequisites(questsByTentAndOrder);
+
+    return syncResults;
   }
 
   private async setQuestPrerequisites(
     questsByTentAndOrder: Map<string, Types.ObjectId>
   ) {
-    try {
-      // Get quest IDs
-      const socialQuest1 = questsByTentAndOrder.get("Social_Quest_1");
-      const socialQuest2 = questsByTentAndOrder.get("Social_Quest_2");
-      const socialQuest3 = questsByTentAndOrder.get("Social_Quest_3");
-      const educationalQuest1 = questsByTentAndOrder.get("Educational_Quest_1");
-      const educationalQuest2 = questsByTentAndOrder.get("Educational_Quest_2");
+    // Get quest IDs
+    const socialQuest1 = questsByTentAndOrder.get("Social_Quest_1");
+    const socialQuest2 = questsByTentAndOrder.get("Social_Quest_2");
+    const socialQuest3 = questsByTentAndOrder.get("Social_Quest_3");
+    const educationalQuest1 = questsByTentAndOrder.get("Educational_Quest_1");
+    const educationalQuest2 = questsByTentAndOrder.get("Educational_Quest_2");
 
-      // Set prerequisites according to the logic
-      if (socialQuest2 && socialQuest1) {
-        // Social Quest 2 requires Social Quest 1
-        await this.updateQuestPrerequisites(socialQuest2, [socialQuest1]);
-      }
+    // Set prerequisites according to the logic
+    if (socialQuest2 && socialQuest1) {
+      // Social Quest 2 requires Social Quest 1
+      await this.updateQuestPrerequisites(socialQuest2, [socialQuest1]);
+    }
 
-      if (educationalQuest1 && socialQuest1 && socialQuest2) {
-        // Educational Quest 1 requires Social Quest 1 & 2
-        await this.updateQuestPrerequisites(educationalQuest1, [
-          socialQuest1,
-          socialQuest2,
-        ]);
-      }
+    if (educationalQuest1 && socialQuest1 && socialQuest2) {
+      // Educational Quest 1 requires Social Quest 1 & 2
+      await this.updateQuestPrerequisites(educationalQuest1, [
+        socialQuest1,
+        socialQuest2,
+      ]);
+    }
 
-      if (socialQuest3 && socialQuest1 && socialQuest2 && educationalQuest1) {
-        // Social Quest 3 requires Social Quest 1 & 2, and Educational Quest 1
-        await this.updateQuestPrerequisites(socialQuest3, [
-          socialQuest1,
-          socialQuest2,
-          educationalQuest1,
-        ]);
-      }
+    if (socialQuest3 && socialQuest1 && socialQuest2 && educationalQuest1) {
+      // Social Quest 3 requires Social Quest 1 & 2, and Educational Quest 1
+      await this.updateQuestPrerequisites(socialQuest3, [
+        socialQuest1,
+        socialQuest2,
+        educationalQuest1,
+      ]);
+    }
 
-      if (
-        educationalQuest2 &&
-        socialQuest1 &&
-        socialQuest2 &&
-        socialQuest3 &&
-        educationalQuest1
-      ) {
-        // Educational Quest 2 requires all previous quests
-        await this.updateQuestPrerequisites(educationalQuest2, [
-          socialQuest1,
-          socialQuest2,
-          socialQuest3,
-          educationalQuest1,
-        ]);
-      }
-    } catch (error: any) {
-      console.error("Error setting quest prerequisites:", error);
+    if (
+      educationalQuest2 &&
+      socialQuest1 &&
+      socialQuest2 &&
+      socialQuest3 &&
+      educationalQuest1
+    ) {
+      // Educational Quest 2 requires all previous quests
+      await this.updateQuestPrerequisites(educationalQuest2, [
+        socialQuest1,
+        socialQuest2,
+        socialQuest3,
+        educationalQuest1,
+      ]);
     }
   }
 
@@ -502,17 +321,7 @@ export class QuestService {
     questId: Types.ObjectId,
     prerequisites: Types.ObjectId[]
   ) {
-    try {
-      await this.questRepository.updateQuestPrerequisites(
-        questId,
-        prerequisites
-      );
-    } catch (error: any) {
-      console.error(
-        `Error updating prerequisites for quest ${questId}:`,
-        error
-      );
-    }
+    await this.questRepository.updateQuestPrerequisites(questId, prerequisites);
   }
 
   async getAllTentsWithQuests() {
@@ -542,9 +351,13 @@ export class QuestService {
       true,
       airLyftAuthToken
     );
+
     if (response?.errors) {
-      throw new Error(`Failed to fetch participation: ${response.errors}`);
+      throw new InternalServerError(
+        `Failed to fetch participation: ${JSON.stringify(response.errors)}`
+      );
     }
+
     const rawParticipations: any[] = response.data?.userTaskParticipation || [];
 
     // 2) Load related tent and quests to build questId map
@@ -628,75 +441,61 @@ export class QuestService {
     tents: any[];
     message: string;
   }> {
-    try {
-      // Fetch user details to get airLyftAuthToken and userId
-      const userResponse = await axios.get<UserResponse>(
-        `${config.services.authServiceUrl}/api/v1/me`,
-        {
-          headers: {
-            Authorization: authToken,
-          },
-        }
-      );
-
-      if (
-        !userResponse.data ||
-        !userResponse.data.status ||
-        !userResponse.data.data?.user?.airLyftAuthToken
-      ) {
-        throw new Error("Failed to retrieve user airLyftAuthToken");
+    // Fetch user details to get airLyftAuthToken and userId
+    const userResponse = await axios.get<UserResponse>(
+      `${config.services.authServiceUrl}/api/v1/me`,
+      {
+        headers: {
+          Authorization: authToken,
+        },
       }
+    );
 
-      const airLyftAuthToken = userResponse.data.data.user.airLyftAuthToken;
-      const userId = userResponse.data.data.user._id;
-
-      // Fetch all tents from database
-      const tents = await this.getAllTentsWithQuests();
-
-      if (!tents || tents.length === 0) {
-        return {
-          tents: [],
-          message: "No tents found",
-        };
-      }
-
-      // Store user task participation for each tent before processing
-      await this.storeUserParticipationForAllTents(
-        tents,
-        userId,
-        airLyftAuthToken
-      );
-
-      // Get user's stored participation data for all tents
-      const userParticipations = await this.getUserAllParticipations(userId);
-
-      // Create a map of completed quests by tent
-      const completedQuestsByTent =
-        this.buildCompletedQuestsMap(userParticipations);
-
-      // Process tents with completion and lock status
-      const tentsWithStatus = this.processTentsWithStatus(
-        tents,
-        completedQuestsByTent
-      );
-
-      return {
-        tents: tentsWithStatus,
-        message: "Tents fetched successfully",
-      };
-    } catch (error: any) {
-      console.error("Error fetching campaigns with status:", error);
-
-      if (error.response?.status === 401) {
-        throw new UnauthorizedError(
-          error.response.data?.message || "Invalid or expired session"
-        );
-      }
-
-      throw new Error(
-        `Failed to fetch campaigns with status: ${error.message}`
-      );
+    if (
+      !userResponse.data ||
+      !userResponse.data.status ||
+      !userResponse.data.data?.user?.airLyftAuthToken
+    ) {
+      throw new InternalServerError("Failed to retrieve user airLyftAuthToken");
     }
+
+    const airLyftAuthToken = userResponse.data.data.user.airLyftAuthToken;
+    const userId = userResponse.data.data.user._id;
+
+    // Fetch all tents from database
+    const tents = await this.getAllTentsWithQuests();
+
+    if (!tents || tents.length === 0) {
+      return {
+        tents: [],
+        message: "No tents found",
+      };
+    }
+
+    // Store user task participation for each tent before processing
+    await this.storeUserParticipationForAllTents(
+      tents,
+      userId,
+      airLyftAuthToken
+    );
+
+    // Get user's stored participation data for all tents
+    const userParticipations = await this.getUserAllParticipations(userId);
+
+    // Create a map of completed quests by tent
+    const completedQuestsByTent =
+      this.buildCompletedQuestsMap(userParticipations);
+
+    // Process tents with completion and lock status
+    const tentsWithStatus = this.processTentsWithStatus(
+      tents,
+      completedQuestsByTent
+    );
+
+    return {
+      tents: tentsWithStatus,
+      message: "Tents fetched successfully",
+    };
   }
 
   private async storeUserParticipationForAllTents(
@@ -884,88 +683,84 @@ export class QuestService {
     quests: any[];
     message: string;
   }> {
-    try {
-      // Get user information first
-      const userInfo = await this.getUserInfo(authToken);
+    // Get user information first
+    const userInfo = await this.getUserInfo(authToken);
 
-      // Store user task participation data before processing
-      await this.storeUserTaskParticipation(
-        userInfo.userId,
-        eventId,
-        userInfo.airLyftAuthToken
-      );
+    // Store user task participation data before processing
+    await this.storeUserTaskParticipation(
+      userInfo.userId,
+      eventId,
+      userInfo.airLyftAuthToken
+    );
 
-      // Fetch tent and quests from database
-      const tent = await this.questRepository.findTentByEventId(eventId);
+    // Fetch tent and quests from database
+    const tent = await this.questRepository.findTentByEventId(eventId);
 
-      if (!tent) {
-        throw new Error("Tent not found");
-      }
-
-      // Type assertion to access populated tentType
-      const populatedTent = tent as any;
-
-      if (!populatedTent.tentType || !populatedTent.tentType.tentType) {
-        throw new Error("Tent type information not found");
-      }
-
-      // Get quests for this tent from database
-      const dbQuests = await this.questRepository.getQuestsByTentId(
-        tent._id.toString()
-      );
-
-      if (!dbQuests || dbQuests.length === 0) {
-        return {
-          quests: [],
-          message: "No quests found for this tent",
-        };
-      }
-
-      // Sort quests by order to ensure proper sequence
-      const sortedQuests = dbQuests.sort(
-        (a: any, b: any) => (a.order || 0) - (b.order || 0)
-      );
-
-      // Get all tents with quests for cross-tent dependency checking
-      const allTents = await this.getAllTentsWithQuests();
-
-      // Get user's participation data from database
-      const userParticipations = await this.getUserAllParticipations(
-        userInfo.userId
-      );
-      const allCompletedTasksByTent =
-        this.buildCompletedQuestsMap(userParticipations);
-
-      // Get completed tasks for current tent
-      const currentTentParticipation = userParticipations.find(
-        (p: any) => p.eventId === eventId
-      );
-
-      const completedTaskIds = new Set<string>();
-      if (currentTentParticipation) {
-        currentTentParticipation.participations.forEach((p: any) => {
-          if (p.status === "VALID" && p.taskId) {
-            completedTaskIds.add(p.taskId);
-          }
-        });
-      }
-
-      // Process quests with completion and lock status
-      const questsWithStatus = this.processQuestsWithComplexLogicFromDB(
-        sortedQuests,
-        completedTaskIds,
-        populatedTent.tentType.tentType, // Use the populated tent
-        allCompletedTasksByTent,
-        allTents
-      );
-
-      return {
-        quests: questsWithStatus,
-        message: "Quests fetched successfully",
-      };
-    } catch (error: any) {
-      throw new Error(`Failed to fetch quests with status: ${error.message}`);
+    if (!tent) {
+      throw new NotFoundError("Tent not found");
     }
+
+    // Type assertion to access populated tentType
+    const populatedTent = tent as any;
+
+    if (!populatedTent.tentType || !populatedTent.tentType.tentType) {
+      throw new InternalServerError("Tent type information not found");
+    }
+
+    // Get quests for this tent from database
+    const dbQuests = await this.questRepository.getQuestsByTentId(
+      tent._id.toString()
+    );
+
+    if (!dbQuests || dbQuests.length === 0) {
+      return {
+        quests: [],
+        message: "No quests found for this tent",
+      };
+    }
+
+    // Sort quests by order to ensure proper sequence
+    const sortedQuests = dbQuests.sort(
+      (a: any, b: any) => (a.order || 0) - (b.order || 0)
+    );
+
+    // Get all tents with quests for cross-tent dependency checking
+    const allTents = await this.getAllTentsWithQuests();
+
+    // Get user's participation data from database
+    const userParticipations = await this.getUserAllParticipations(
+      userInfo.userId
+    );
+    const allCompletedTasksByTent =
+      this.buildCompletedQuestsMap(userParticipations);
+
+    // Get completed tasks for current tent
+    const currentTentParticipation = userParticipations.find(
+      (p: any) => p.eventId === eventId
+    );
+
+    const completedTaskIds = new Set<string>();
+    if (currentTentParticipation) {
+      currentTentParticipation.participations.forEach((p: any) => {
+        if (p.status === "VALID" && p.taskId) {
+          completedTaskIds.add(p.taskId);
+        }
+      });
+    }
+
+    // Process quests with completion and lock status
+    const questsWithStatus = this.processQuestsWithComplexLogicFromDB(
+      sortedQuests,
+      completedTaskIds,
+      populatedTent.tentType.tentType, // Use the populated tent
+      allCompletedTasksByTent,
+      allTents
+    );
+
+    return {
+      quests: questsWithStatus,
+      message: "Quests fetched successfully",
+    };
   }
 
   private processQuestsWithComplexLogicFromDB(
@@ -1018,7 +813,7 @@ export class QuestService {
   }
 
   private determineQuestLockStatusFromDB(
-    quest: any,
+    _quest: any,
     questIndex: number,
     tentType: string,
     currentTentCompletedTasks: Set<string>,
@@ -1216,7 +1011,7 @@ export class QuestService {
       !userResponse.data.status ||
       !userResponse.data.data?.user?.airLyftAuthToken
     ) {
-      throw new Error("Failed to retrieve user information");
+      throw new UnauthorizedError("Failed to retrieve user information");
     }
 
     return {
@@ -1233,43 +1028,27 @@ export class QuestService {
     success: boolean;
     data?: any;
   }> {
-    try {
-      // Get user info to retrieve airLyftAuthToken
-      const { airLyftAuthToken } = await this.getUserInfo(authToken);
+    // Get user info to retrieve airLyftAuthToken
+    const { airLyftAuthToken } = await this.getUserInfo(authToken);
 
-      // Make request to AirLyft API
-      const response = await axios.post(
-        `${config.airLyft.restEndpoint}/auth/email/link-account?projectId=${config.airLyft.projectId}`,
-        { email },
-        {
-          headers: {
-            Authorization: `Bearer ${airLyftAuthToken}`,
-            "api-key": config.airLyft.apiKey,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      return {
-        message: "OTP sent successfully",
-        success: true,
-        data: response.data,
-      };
-    } catch (error: any) {
-      console.error("Error sending email OTP:", error);
-
-      if (error.response?.status === 401) {
-        throw new UnauthorizedError(
-          error.response.data?.message || "Invalid or expired session"
-        );
+    // Make request to AirLyft API
+    const response = await axios.post(
+      `${config.airLyft.restEndpoint}/auth/email/link-account?projectId=${config.airLyft.projectId}`,
+      { email },
+      {
+        headers: {
+          Authorization: `Bearer ${airLyftAuthToken}`,
+          "api-key": config.airLyft.apiKey,
+          "Content-Type": "application/json",
+        },
       }
+    );
 
-      throw new Error(
-        `Failed to send email OTP: ${
-          error.response?.data?.message || error.message
-        }`
-      );
-    }
+    return {
+      message: "OTP sent successfully",
+      success: true,
+      data: response.data,
+    };
   }
 
   async verifyEmailOTP(
@@ -1281,66 +1060,49 @@ export class QuestService {
     success: boolean;
     data?: any;
   }> {
-    try {
-      // Get user info to retrieve airLyftAuthToken
-      const { airLyftAuthToken } = await this.getUserInfo(authToken);
+    // Get user info to retrieve airLyftAuthToken
+    const { airLyftAuthToken } = await this.getUserInfo(authToken);
 
-      // Verify OTP with AirLyft API
-      const verifyResponse = await axios.post(
-        `${config.airLyft.restEndpoint}/auth/email/verify-link-account?projectId=${config.airLyft.projectId}`,
-        { email, code },
-        {
-          headers: {
-            Authorization: `Bearer ${airLyftAuthToken}`,
-            "api-key": config.airLyft.apiKey,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      // Check for conflicted user profile
-      const conflictCheckResponse = await executeGraphQLQuery(
-        CONFLICTED_USER_PROFILE_QUERY,
-        {
-          provider: "MAGIC_LINK",
-          providerId: email,
+    // Verify OTP with AirLyft API
+    const verifyResponse = await axios.post(
+      `${config.airLyft.restEndpoint}/auth/email/verify-link-account?projectId=${config.airLyft.projectId}`,
+      { email, code },
+      {
+        headers: {
+          Authorization: `Bearer ${airLyftAuthToken}`,
+          "api-key": config.airLyft.apiKey,
+          "Content-Type": "application/json",
         },
-        true,
-        true,
-        airLyftAuthToken
-      );
-
-      console.log("Conflict check response:", conflictCheckResponse);
-
-      // if (conflictCheckResponse?.errors) {
-      //   throw new Error("Conflict check failed");
-      // }
-
-      // If conflictedUserProfile is not null, there's a conflict
-      if (conflictCheckResponse?.data?.conflictedUserProfile !== null) {
-        throw new Error("Account linking conflict detected");
       }
+    );
 
-      return {
-        message: "OTP verified successfully",
-        success: true,
-        data: verifyResponse.data,
-      };
-    } catch (error: any) {
-      console.error("Error verifying email OTP:", error);
+    // Check for conflicted user profile
+    const conflictCheckResponse = await executeGraphQLQuery(
+      CONFLICTED_USER_PROFILE_QUERY,
+      {
+        provider: "MAGIC_LINK",
+        providerId: email,
+      },
+      true,
+      true,
+      airLyftAuthToken
+    );
 
-      if (error.response?.status === 401) {
-        throw new UnauthorizedError(
-          error.response.data?.message || "Invalid or expired session"
-        );
-      }
+    console.log("Conflict check response:", conflictCheckResponse);
 
-      throw new Error(
-        `Failed to verify email OTP: ${
-          error.response?.data?.message || error.message
-        }`
+    // If conflictedUserProfile is not null, there's a conflict
+    if (conflictCheckResponse?.data?.conflictedUserProfile !== null) {
+      throw new ValidationError(
+        { conflict: "Account linking conflict detected" },
+        "Account linking conflict detected"
       );
     }
+
+    return {
+      message: "OTP verified successfully",
+      success: true,
+      data: verifyResponse.data,
+    };
   }
 
   async participateEmailAddressTask(
@@ -1353,52 +1115,40 @@ export class QuestService {
     success: boolean;
     data?: any;
   }> {
-    try {
-      // Get user info to retrieve airLyftAuthToken
-      const { airLyftAuthToken } = await this.getUserInfo(authToken);
+    // Get user info to retrieve airLyftAuthToken
+    const { airLyftAuthToken } = await this.getUserInfo(authToken);
 
-      // Execute the GraphQL mutation
-      const response = await executeGraphQLQuery(
-        PARTICIPATE_EMAIL_ADDRESS_TASK_MUTATION,
-        {
-          eventId,
-          taskId,
-          providerId,
-        },
-        true,
-        true,
-        airLyftAuthToken
-      );
+    // Execute the GraphQL mutation
+    const response = await executeGraphQLQuery(
+      PARTICIPATE_EMAIL_ADDRESS_TASK_MUTATION,
+      {
+        eventId,
+        taskId,
+        providerId,
+      },
+      true,
+      true,
+      airLyftAuthToken
+    );
 
-      if (response?.errors) {
-        throw new Error(`GraphQL errors: ${JSON.stringify(response.errors)}`);
-      }
-
-      const participationResult = response?.data?.participateEmailAddressTask;
-
-      if (!participationResult) {
-        throw new Error("No participation result returned from API");
-      }
-
-      return {
-        message: "Email address task participation successful",
-        success: true,
-        data: participationResult,
-      };
-    } catch (error: any) {
-      console.error("Error participating in email address task:", error);
-
-      if (error.response?.status === 401) {
-        throw new UnauthorizedError(
-          error.response.data?.message || "Invalid or expired session"
-        );
-      }
-
-      throw new Error(
-        `Failed to participate in email address task: ${
-          error.response?.data?.message || error.message
-        }`
+    if (response?.errors) {
+      throw new InternalServerError(
+        `GraphQL errors: ${JSON.stringify(response.errors)}`
       );
     }
+
+    const participationResult = response?.data?.participateEmailAddressTask;
+
+    if (!participationResult) {
+      throw new InternalServerError(
+        "No participation result returned from API"
+      );
+    }
+
+    return {
+      message: "Email address task participation successful",
+      success: true,
+      data: participationResult,
+    };
   }
 }
