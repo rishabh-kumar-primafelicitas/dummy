@@ -1,8 +1,10 @@
 import { QuestController } from "@controllers/quest.controller";
+import { UserProgressController } from "@controllers/user.progress.controller";
 import { Router } from "express";
 
 const router = Router();
 const questController = new QuestController();
+const userProgressController = new UserProgressController();
 
 router.get("/quests/:eventId", questController.fetchQuests);
 
@@ -72,5 +74,22 @@ router.get(
 // Email OTP endpoints
 router.post("/send-otp", questController.sendEmailOTP);
 router.post("/verify-otp", questController.verifyEmailOTP);
+
+router.get("/user-progress/:userId", userProgressController.getUserProgress);
+router.post("/user-activity", userProgressController.updateUserActivity);
+router.post("/quest-completion", userProgressController.processQuestCompletion);
+router.post("/admin/safety-check", userProgressController.runDailySafetyCheck);
+router.post(
+  "/admin/init-level-rewards",
+  userProgressController.initializeLevelRewards
+);
+router.post(
+  "/admin/trigger-safety-check",
+  userProgressController.triggerSafetyCheck
+);
+router.get(
+  "/admin/scheduler-status",
+  userProgressController.getSchedulerStatus
+);
 
 export default router;

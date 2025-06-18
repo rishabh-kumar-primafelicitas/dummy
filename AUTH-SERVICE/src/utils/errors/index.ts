@@ -1,5 +1,12 @@
 import { AppError } from "./app.error";
 
+export class BadRequestError extends AppError {
+  constructor(message: string = "Bad Request") {
+    super(message, 400);
+    this.name = "BadRequestError";
+  }
+}
+
 export class NotFoundError extends AppError {
   constructor(message: string = "Resource not found") {
     super(message, 404);

@@ -41,7 +41,12 @@ const envSchema = z.object({
   BREVO_API_KEY: z.string().optional(),
   BREVO_SENDER_EMAIL: z.string().email().optional(),
   APP_BASE_URL: z.string().url().default("http://localhost:3000"),
+
+  // Frontend URL
   FRONTEND_URL: z.string().url().default("http://localhost:4200"),
+
+  // Service URLs
+  QUEST_SERVICE_URL: z.string().url().default("http://localhost:3003"),
 });
 
 const envVars = envSchema.parse(process.env);
@@ -108,8 +113,10 @@ export const config = {
     apiKey: envVars.BREVO_API_KEY || "",
     senderEmail: envVars.BREVO_SENDER_EMAIL || "",
   },
+
   appBaseUrl: envVars.APP_BASE_URL,
   frontendUrl: envVars.FRONTEND_URL,
+  questServiceUrl: envVars.QUEST_SERVICE_URL,
 } as const;
 
 // Export types for TypeScript

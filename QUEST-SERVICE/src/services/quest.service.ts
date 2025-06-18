@@ -17,6 +17,7 @@ import {
 } from "@utils/errors";
 import { ValidationError } from "@utils/errors/validation.error";
 import { PrerequisiteService } from "./prerequisite.service";
+import { UserProgressService } from "./user.progress.service";
 
 interface UserResponse {
   status: boolean;
@@ -50,10 +51,40 @@ interface UserResponse {
 export class QuestService {
   private questRepository: QuestRepository;
   private prerequisiteService: PrerequisiteService;
+  private userProgressService: UserProgressService;
 
   constructor() {
     this.questRepository = new QuestRepository();
     this.prerequisiteService = new PrerequisiteService();
+    this.userProgressService = new UserProgressService();
+  }
+
+  private async processQuestXP(
+    userResponse: any,
+    eventId: string,
+    taskId: string
+  ): Promise<any> {
+    try {
+      const userId = userResponse.data.data.user._id;
+
+      // Find the quest and tent info for XP processing
+      const quest = await this.getQuestByTaskId(taskId);
+      const tent = await this.getTentByEventId(eventId);
+
+      if (quest && tent) {
+        return await this.handleQuestCompletionWithXP(
+          userId,
+          quest,
+          tent.tentType?.tentType
+        );
+      }
+
+      return null;
+    } catch (xpError: any) {
+      console.error("Error processing XP for quest completion:", xpError);
+      // Don't fail the whole request if XP processing fails
+      return null;
+    }
   }
 
   private isQuestCompletedByUser(
@@ -551,6 +582,7 @@ export class QuestService {
       totalPoints: number;
       totalXp: number;
     };
+    xpResults?: any[];
   }> {
     // 1) Fetch raw participation data from external API
     const response = await executeGraphQLQuery(
@@ -624,6 +656,37 @@ export class QuestService {
         participations,
       });
 
+    // Process XP for newly completed quests
+    const xpResults = [];
+    for (const participation of participations) {
+      if (participation.status === "VALID" && participation.questId) {
+        try {
+          const quest = await this.questRepository.findQuestById(
+            participation.questId
+          );
+          if (quest) {
+            const tentTypeObj = await this.questRepository.findTentByEventId(
+              eventId
+            );
+            const tentTypeName =
+              (tentTypeObj?.tentType as any)?.tentType || "Unknown";
+
+            const xpResult = await this.handleQuestCompletionWithXP(
+              userId,
+              quest,
+              tentTypeName
+            );
+            xpResults.push(xpResult);
+          }
+        } catch (error: any) {
+          console.error(
+            `Error processing XP for quest ${participation.taskId}:`,
+            error
+          );
+        }
+      }
+    }
+
     // 7) Return a structured response
     return {
       message: "User task participation stored successfully",
@@ -635,6 +698,7 @@ export class QuestService {
         totalPoints,
         totalXp,
       },
+      xpResults,
     };
   }
 
@@ -938,7 +1002,7 @@ export class QuestService {
     data?: any;
   }> {
     // Get user info to retrieve airLyftAuthToken
-    const { airLyftAuthToken } = await this.getUserInfo(authToken);
+    const userResponse = await this.getUserInfo(authToken);
 
     // Execute the GraphQL mutation
     const response = await executeGraphQLQuery(
@@ -950,7 +1014,7 @@ export class QuestService {
       },
       true,
       true,
-      airLyftAuthToken
+      userResponse.airLyftAuthToken
     );
 
     if (response?.errors) {
@@ -967,10 +1031,82 @@ export class QuestService {
       );
     }
 
+    // Process XP
+    const xpResult = await this.processQuestXP(userResponse, eventId, taskId);
+
     return {
       message: "Email address task participation successful",
       success: true,
-      data: participationResult,
+      data: {
+        participation: participationResult,
+        xpResult: xpResult,
+      },
     };
+  }
+
+  async getQuestByTaskId(taskId: string): Promise<any> {
+    return await this.questRepository.findQuestByTaskId(taskId);
+  }
+
+  async getTentByEventId(eventId: string): Promise<any> {
+    return await this.questRepository.findTentByEventId(eventId);
+  }
+
+  async handleQuestCompletionWithXP(
+    userId: string,
+    quest: any,
+    tentType?: string
+  ): Promise<any> {
+    try {
+      // Process XP and safety meter updates
+      const xpResult = await this.userProgressService.processQuestCompletion(
+        userId,
+        quest,
+        tentType
+      );
+
+      // Also update the stored participation data
+      await this.refreshUserParticipationData(userId, quest.tentId);
+
+      return {
+        ...xpResult,
+        questId: quest.taskId,
+        tentType,
+      };
+    } catch (error: any) {
+      console.error("Error handling quest completion with XP:", error);
+      throw new InternalServerError(
+        `Failed to process quest completion: ${error.message}`
+      );
+    }
+  }
+
+  private async refreshUserParticipationData(
+    userId: string,
+    tentId: string
+  ): Promise<void> {
+    try {
+      // Get tent by ID to find eventId
+      const tent = await this.questRepository.findTentByEventId(tentId);
+      if (tent) {
+        // Get user's airLyftAuthToken
+        const userResponse = await axios.get(
+          `${config.services.authServiceUrl}/api/v1/public/me`,
+          { headers: { userid: userId } }
+        );
+
+        if (userResponse.data?.data?.user?.airLyftAuthToken) {
+          // Refresh participation data
+          await this.storeUserTaskParticipation(
+            userId,
+            tent.eventId,
+            userResponse.data.data.user.airLyftAuthToken
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error("Error refreshing participation data:", error);
+      // Don't throw - this is background refresh
+    }
   }
 }

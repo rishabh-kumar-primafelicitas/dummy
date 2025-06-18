@@ -19,6 +19,7 @@ import { AirLyftService } from "./airlyft.service";
 import { logger } from "@utils/logger.util";
 import { BrevoService } from "./brevo.service";
 import { PasswordUtil } from "@utils/password.util";
+import axios from "axios";
 export interface SignupData {
   username: string;
   // email: string;
@@ -31,6 +32,7 @@ export interface LoginData {
 }
 
 export interface AuthResponse {
+  created?: boolean;
   user: {
     id: string;
     username: string;
@@ -61,6 +63,34 @@ export class AuthService {
     this.authRepository = new AuthRepository();
     this.airLyftService = new AirLyftService();
     this.brevoService = new BrevoService();
+  }
+
+  private async updatePlayerLoginActivity(userId: string): Promise<void> {
+    try {
+      const questServiceUrl =
+        config?.questServiceUrl ||
+        process.env.QUEST_SERVICE_URL ||
+        "http://localhost:4089";
+
+      await axios.post(
+        `${questServiceUrl}/api/v1/user-activity`,
+        {
+          userId,
+          activityType: "LOGIN",
+        },
+        {
+          timeout: 5000, // 5 second timeout
+        }
+      );
+
+      logger.debug(`Player login activity updated for user ${userId}`);
+    } catch (error: any) {
+      // Log error but don't fail the signup/login process
+      logger.error(
+        `Failed to update player login activity for user ${userId}:`,
+        error.message
+      );
+    }
   }
 
   async signup(signupData: SignupData, req: Request): Promise<AuthResponse> {
@@ -175,7 +205,14 @@ export class AuthService {
         (key) => RoleName[key as keyof typeof RoleName] === role?.name
       ) as string;
 
+      if (role?.name === RoleName.PLAYER) {
+        this.updatePlayerLoginActivity(
+          (existingUser._id as Types.ObjectId).toString()
+        );
+      }
+
       return {
+        created: false,
         user: {
           id: (existingUser._id as Types.ObjectId).toString(),
           username: existingUser.username,
@@ -304,7 +341,12 @@ export class AuthService {
       (key) => RoleName[key as keyof typeof RoleName] === role?.name
     ) as string;
 
+    if (role?.name === RoleName.PLAYER) {
+      this.updatePlayerLoginActivity((user._id as Types.ObjectId).toString());
+    }
+
     return {
+      created: true,
       user: {
         id: (user._id as Types.ObjectId).toString(),
         username: user.username,

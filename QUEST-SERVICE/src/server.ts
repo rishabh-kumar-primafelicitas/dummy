@@ -2,12 +2,17 @@ import { createApp } from "./app";
 import { connectDatabase } from "@config/database.config";
 import { config } from "@config/server.config";
 import { logger } from "@utils/logger";
+import { SchedulerUtil } from "@utils/scheduler.util";
 import mongoose from "mongoose";
 
 const startServer = async () => {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Initialize scheduled jobs
+    const scheduler = new SchedulerUtil();
+    scheduler.initializeScheduledJobs();
 
     // Create Express app
     const app = createApp();
@@ -17,11 +22,23 @@ const startServer = async () => {
       logger.info(
         `Server running on port ${config.port} in ${config.env} mode`
       );
+
+      // Log scheduler status
+      const jobsStatus = scheduler.getJobsStatus();
+      logger.info("Scheduler status:", jobsStatus);
     });
 
     // Graceful shutdown
     const gracefulShutdown = async (signal: string) => {
       logger.info(`${signal} received, shutting down gracefully`);
+
+      // Stop scheduled jobs first
+      try {
+        scheduler.stopAllJobs();
+        logger.info("All scheduled jobs stopped");
+      } catch (error: any) {
+        logger.error("Error stopping scheduled jobs:", error);
+      }
 
       server.close(() => {
         logger.info("HTTP server closed");
@@ -40,12 +57,12 @@ const startServer = async () => {
     // Handle uncaught exceptions
     process.on("uncaughtException", (error) => {
       logger.error("Uncaught Exception:", error);
-      process.exit(1);
+      gracefulShutdown("UNCAUGHT_EXCEPTION");
     });
 
     process.on("unhandledRejection", (reason, promise) => {
       logger.error("Unhandled Rejection at:", promise, "reason:", reason);
-      process.exit(1);
+      gracefulShutdown("UNHANDLED_REJECTION");
     });
   } catch (error) {
     logger.error("Failed to start server:", error);

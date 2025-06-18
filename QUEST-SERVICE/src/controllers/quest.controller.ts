@@ -89,6 +89,34 @@ export class QuestController {
     this.questService = new QuestService();
   }
 
+  private async processQuestXP(
+    userResponse: any,
+    eventId: string,
+    taskId: string
+  ): Promise<any> {
+    try {
+      const userId = userResponse.data.data.user._id;
+
+      // Find the quest and tent info for XP processing
+      const quest = await this.questService.getQuestByTaskId(taskId);
+      const tent = await this.questService.getTentByEventId(eventId);
+
+      if (quest && tent) {
+        return await this.questService.handleQuestCompletionWithXP(
+          userId,
+          quest,
+          tent.tentType?.tentType
+        );
+      }
+
+      return null;
+    } catch (xpError: any) {
+      console.error("Error processing XP for quest completion:", xpError);
+      // Don't fail the whole request if XP processing fails
+      return null;
+    }
+  }
+
   fetchCampaigns = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
       // Get authorization token from headers (mandatory)
@@ -675,9 +703,15 @@ export class QuestController {
         );
       }
 
+      // Process XP
+      const xpResult = await this.processQuestXP(userResponse, eventId, taskId);
+
       res.status(200).json({
         status: true,
-        data: participationResult,
+        data: {
+          participation: participationResult,
+          xpResult, // Will be null if processing failed
+        },
         message: "Twitter follow task participated successfully",
       });
     }
@@ -1248,8 +1282,6 @@ export class QuestController {
         airLyftAuthToken
       );
 
-      console.log("GraphQL response:", response);
-
       if (response?.errors) {
         throw new ValidationError(
           { graphql: response.errors },
@@ -1266,9 +1298,15 @@ export class QuestController {
         );
       }
 
+      // Process XP
+      const xpResult = await this.processQuestXP(userResponse, eventId, taskId);
+
       res.status(200).json({
         status: true,
-        data: participationResult,
+        data: {
+          participation: participationResult,
+          xpResult,
+        },
         message: "Discord join task participated successfully",
       });
     }
@@ -1353,9 +1391,15 @@ export class QuestController {
         );
       }
 
+      // Process XP
+      const xpResult = await this.processQuestXP(userResponse, eventId, taskId);
+
       res.status(200).json({
         status: true,
-        data: participationResult,
+        data: {
+          participation: participationResult,
+          xpResult,
+        },
         message: "Link task participated successfully",
       });
     }
