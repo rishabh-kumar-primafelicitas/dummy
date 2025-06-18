@@ -15,6 +15,10 @@ export class QuestRepository {
     return await Tent.findOne({ eventId }).populate("tentType");
   }
 
+  async findTentById(tentId: Types.ObjectId) {
+    return await Tent.findById(tentId).populate("tentType");
+  }
+
   async updateTentQuestIds(tentId: string, questIds: string[]) {
     return await Tent.findByIdAndUpdate(
       tentId,

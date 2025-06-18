@@ -129,7 +129,7 @@ export class UserProgressService {
     });
 
     // Check if meters should become visible
-    await this.checkMeterVisibility(userId);
+    // await this.checkMeterVisibility(userId);
 
     logger.info(`Quest completion processed for user ${userId}`, {
       baseXP,

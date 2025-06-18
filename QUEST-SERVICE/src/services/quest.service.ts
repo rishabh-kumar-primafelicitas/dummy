@@ -657,35 +657,35 @@ export class QuestService {
       });
 
     // Process XP for newly completed quests
-    const xpResults = [];
-    for (const participation of participations) {
-      if (participation.status === "VALID" && participation.questId) {
-        try {
-          const quest = await this.questRepository.findQuestById(
-            participation.questId
-          );
-          if (quest) {
-            const tentTypeObj = await this.questRepository.findTentByEventId(
-              eventId
-            );
-            const tentTypeName =
-              (tentTypeObj?.tentType as any)?.tentType || "Unknown";
+    // const xpResults = [];
+    // for (const participation of participations) {
+    //   if (participation.status === "VALID" && participation.questId) {
+    //     try {
+    //       const quest = await this.questRepository.findQuestById(
+    //         participation.questId
+    //       );
+    //       if (quest) {
+    //         const tentTypeObj = await this.questRepository.findTentByEventId(
+    //           eventId
+    //         );
+    //         const tentTypeName =
+    //           (tentTypeObj?.tentType as any)?.tentType || "Unknown";
 
-            const xpResult = await this.handleQuestCompletionWithXP(
-              userId,
-              quest,
-              tentTypeName
-            );
-            xpResults.push(xpResult);
-          }
-        } catch (error: any) {
-          console.error(
-            `Error processing XP for quest ${participation.taskId}:`,
-            error
-          );
-        }
-      }
-    }
+    //         const xpResult = await this.handleQuestCompletionWithXP(
+    //           userId,
+    //           quest,
+    //           tentTypeName
+    //         );
+    //         xpResults.push(xpResult);
+    //       }
+    //     } catch (error: any) {
+    //       console.error(
+    //         `Error processing XP for quest ${participation.taskId}:`,
+    //         error
+    //       );
+    //     }
+    //   }
+    // }
 
     // 7) Return a structured response
     return {
@@ -698,7 +698,7 @@ export class QuestService {
         totalPoints,
         totalXp,
       },
-      xpResults,
+      // xpResults,
     };
   }
 
@@ -1058,6 +1058,9 @@ export class QuestService {
     tentType?: string
   ): Promise<any> {
     try {
+      // Also update the stored participation data
+      await this.refreshUserParticipationData(userId, quest.tentId);
+
       // Process XP and safety meter updates
       const xpResult = await this.userProgressService.processQuestCompletion(
         userId,
@@ -1065,8 +1068,8 @@ export class QuestService {
         tentType
       );
 
-      // Also update the stored participation data
-      await this.refreshUserParticipationData(userId, quest.tentId);
+      // Check if meters should become visible
+      await this.userProgressService.checkMeterVisibility(userId);
 
       return {
         ...xpResult,
@@ -1086,8 +1089,10 @@ export class QuestService {
     tentId: string
   ): Promise<void> {
     try {
-      // Get tent by ID to find eventId
-      const tent = await this.questRepository.findTentByEventId(tentId);
+      // Get tent by ID
+      const tent = await this.questRepository.findTentById(
+        new Types.ObjectId(tentId)
+      );
       if (tent) {
         // Get user's airLyftAuthToken
         const userResponse = await axios.get(
