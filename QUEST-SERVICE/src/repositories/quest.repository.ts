@@ -45,6 +45,10 @@ export class QuestRepository {
     return await Quest.findOne({ taskId });
   }
 
+  async findQuestById(questId: Types.ObjectId) {
+    return await Quest.findById(questId);
+  }
+
   async createMultipleQuests(questsData: any[]) {
     return await Quest.insertMany(questsData);
   }
@@ -56,19 +60,75 @@ export class QuestRepository {
     return await Quest.find({ tentId: tent._id });
   }
 
-  async updateQuestPrerequisites(
+  // Update quest dynamic prerequisites
+  async updateQuestDynamicPrerequisites(
+    questId: Types.ObjectId,
+    prerequisites: Types.ObjectId[],
+    condition: "AND" | "OR"
+  ) {
+    return await Quest.findByIdAndUpdate(
+      questId,
+      {
+        dynamicPrerequisites: prerequisites,
+        prerequisiteCondition: condition,
+      },
+      { new: true }
+    );
+  }
+
+  // Update quest custom prerequisites
+  async updateQuestCustomPrerequisites(
     questId: Types.ObjectId,
     prerequisites: Types.ObjectId[]
   ) {
     return await Quest.findByIdAndUpdate(
       questId,
-      { prerequisites },
+      { customPrerequisites: prerequisites },
       { new: true }
     );
   }
 
+  // Get quests by task IDs
+  async findQuestsByTaskIds(taskIds: string[]): Promise<any[]> {
+    return await Quest.find({ taskId: { $in: taskIds } });
+  }
+
+  // Get all quests with their prerequisites populated
+  async getQuestsWithPrerequisites() {
+    return await Quest.find()
+      .populate("dynamicPrerequisites")
+      .populate("customPrerequisites");
+  }
+
+  // Create task ID to quest ID mapping
+  async createTaskIdToQuestIdMap(): Promise<Map<string, Types.ObjectId>> {
+    const quests = await Quest.find({}, "taskId _id");
+    const map = new Map<string, Types.ObjectId>();
+
+    quests.forEach((quest) => {
+      map.set(quest.taskId, quest._id);
+    });
+
+    return map;
+  }
+
+  // Create quest ID to task ID mapping
+  async createQuestIdToTaskIdMap(): Promise<Map<string, string>> {
+    const quests = await Quest.find({}, "taskId _id");
+    const map = new Map<string, string>();
+
+    quests.forEach((quest) => {
+      map.set(quest._id.toString(), quest.taskId);
+    });
+
+    return map;
+  }
+
   async getQuestsByTentId(tentId: string) {
-    return await Quest.find({ tentId }).sort({ order: 1 });
+    return await Quest.find({ tentId })
+      .populate("dynamicPrerequisites")
+      .populate("customPrerequisites")
+      .sort({ order: 1 });
   }
 
   // UserTaskParticipation methods

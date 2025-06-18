@@ -6,8 +6,12 @@ import { morganMiddleware } from "@middleware/logger.middleware";
 import { errorHandler } from "@middleware/error.handler.middleware";
 import { indexRoutes } from "@routes/index.route";
 import { NotFoundError } from "@utils/errors/index";
+import { setupAxiosInterceptors } from "@config/axios.config";
 
 export const createApp = (): Application => {
+  // Set up axios interceptors
+  setupAxiosInterceptors();
+
   const app = express();
 
   // Security middleware

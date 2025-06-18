@@ -28,10 +28,23 @@ const questSchema = new Schema(
       type: Date,
       default: null,
     },
-    prerequisites: {
+    // Dynamic prerequisites from guardConfig TASK_ID rules
+    dynamicPrerequisites: {
       type: [Schema.Types.ObjectId],
       ref: "Quest",
       default: [],
+    },
+    // Custom prerequisites for cross-campaign dependencies
+    customPrerequisites: {
+      type: [Schema.Types.ObjectId],
+      ref: "Quest",
+      default: [],
+    },
+    // Condition logic from guardConfig (AND/OR)
+    prerequisiteCondition: {
+      type: String,
+      enum: ["AND", "OR"],
+      default: "AND",
     },
     rewardType: {
       type: Schema.Types.ObjectId,
@@ -62,15 +75,15 @@ const questSchema = new Schema(
     },
     appType: {
       type: String,
-      enum: [
-        "TWITTER",
-        "DISCORD",
-        "TELEGRAM",
-        "CUSTOM",
-        "INSTAGRAM",
-        "YOUTUBE",
-        "EMAIL",
-      ],
+      // enum: [
+      //   "TWITTER",
+      //   "DISCORD",
+      //   "TELEGRAM",
+      //   "CUSTOM",
+      //   "INSTAGRAM",
+      //   "YOUTUBE",
+      //   "EMAIL",
+      // ],
       default: null,
     },
     taskType: {

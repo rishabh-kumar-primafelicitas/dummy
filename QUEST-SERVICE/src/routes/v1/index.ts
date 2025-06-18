@@ -46,6 +46,22 @@ router.post(
 // Sync endpoints
 router.post("/sync/tents-and-quests", questController.syncTentsAndQuests);
 router.get("/tents-with-quests", questController.getAllTentsWithQuests);
+router.post(
+  "/quests/custom-prerequisites",
+  questController.setCustomPrerequisites
+);
+router.get(
+  "/quests/:questId/prerequisites",
+  questController.getQuestPrerequisites
+);
+router.post(
+  "/quests/set-cross-campaign-rules",
+  questController.setPredefinedCrossCampaignRules
+);
+router.get(
+  "/quests/all-with-prerequisites",
+  questController.getAllQuestsWithPrerequisites
+);
 
 // Get stored participation data
 router.get(

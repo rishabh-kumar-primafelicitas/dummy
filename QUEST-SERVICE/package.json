@@ -21,7 +21,6 @@
   },
   "homepage": "https://github.com/awsprimafelicitas/quest-service-ch#readme",
   "devDependencies": {
-    "@types/axios": "^0.9.36",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.18",
     "@types/express": "^5.0.2",

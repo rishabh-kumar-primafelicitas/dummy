@@ -16,8 +16,13 @@ import { config } from "@config/server.config";
 import axios from "axios";
 import { QuestService } from "@services/quest.service";
 import { ValidationError } from "@utils/errors/validation.error";
-import { ConfigurationError, UnauthorizedError } from "@utils/errors";
+import {
+  ConfigurationError,
+  NotFoundError,
+  UnauthorizedError,
+} from "@utils/errors";
 import { asyncHandler } from "@utils/async.handler.util";
+import { Types } from "mongoose";
 
 // Interface for user response
 interface UserResponse {
@@ -1537,6 +1542,122 @@ export class QuestController {
         status: true,
         message: result.message,
         data: result.data,
+      });
+    }
+  );
+
+  setCustomPrerequisites = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+      const { questId, customPrerequisites, action = "set" } = req.body;
+
+      const errors: Record<string, string> = {};
+      if (!questId) errors.questId = "Quest ID is required";
+      if (!customPrerequisites || !Array.isArray(customPrerequisites)) {
+        errors.customPrerequisites = "Custom prerequisites array is required";
+      }
+
+      if (Object.keys(errors).length > 0) {
+        throw new ValidationError(errors, "Missing required fields");
+      }
+
+      // Fix: Add explicit typing to the map function
+      let questObjectId: Types.ObjectId;
+      let prerequisiteObjectIds: Types.ObjectId[];
+
+      try {
+        questObjectId = Types.ObjectId.createFromHexString(questId);
+        prerequisiteObjectIds = customPrerequisites.map((id: string) =>
+          Types.ObjectId.createFromHexString(id)
+        );
+      } catch (error) {
+        throw new ValidationError(
+          { ids: "Invalid ObjectId format" },
+          "Invalid ID format"
+        );
+      }
+
+      const result = await this.questService.setCustomPrerequisites(
+        questObjectId,
+        prerequisiteObjectIds
+      );
+
+      res.status(200).json({
+        status: true,
+        message: result.message,
+        data: result.data,
+      });
+    }
+  );
+
+  setPredefinedCrossCampaignRules = asyncHandler(
+    async (
+      _req: Request,
+      res: Response,
+      _next: NextFunction
+    ): Promise<void> => {
+      const result = await this.questService.setPredefinedCrossCampaignRules();
+
+      res.status(200).json({
+        status: true,
+        message: result.message,
+      });
+    }
+  );
+
+  getQuestPrerequisites = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+      const { questId } = req.params;
+
+      if (!questId) {
+        throw new ValidationError(
+          { questId: "Quest ID is required" },
+          "Missing required fields"
+        );
+      }
+
+      let questObjectId: Types.ObjectId;
+      try {
+        questObjectId = Types.ObjectId.createFromHexString(questId);
+      } catch (error) {
+        throw new ValidationError(
+          { questId: "Invalid Quest ID format" },
+          "Invalid ID format"
+        );
+      }
+
+      const quest = await this.questService.getQuestById(questObjectId);
+
+      if (!quest) {
+        throw new NotFoundError("Quest not found");
+      }
+
+      res.status(200).json({
+        status: true,
+        data: {
+          questId: quest._id,
+          title: quest.title,
+          dynamicPrerequisites: quest.dynamicPrerequisites || [],
+          customPrerequisites: quest.customPrerequisites || [],
+          prerequisiteCondition: quest.prerequisiteCondition || "AND",
+          guardConfig: quest.guardConfig,
+        },
+        message: "Quest prerequisites retrieved successfully",
+      });
+    }
+  );
+
+  getAllQuestsWithPrerequisites = asyncHandler(
+    async (
+      _req: Request,
+      res: Response,
+      _next: NextFunction
+    ): Promise<void> => {
+      const quests = await this.questService.getAllQuestsWithPrerequisites();
+
+      res.status(200).json({
+        status: true,
+        data: quests,
+        message: "All quests with prerequisites retrieved successfully",
       });
     }
   );
