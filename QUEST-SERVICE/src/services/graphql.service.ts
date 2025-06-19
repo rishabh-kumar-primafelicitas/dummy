@@ -14,7 +14,8 @@ export const executeGraphQLQuery = async (
   variables: any,
   useAuth: boolean = false,
   useApiKey: boolean = false,
-  customAuthToken?: string
+  customAuthToken?: string,
+  clientIp?: string
 ): Promise<GraphQLResponse> => {
   const headers: any = {
     "Content-Type": "application/json",
@@ -27,6 +28,10 @@ export const executeGraphQLQuery = async (
 
   if (useApiKey) {
     headers["api-key"] = process.env.AIRLYFT_API_KEY;
+  }
+
+  if (clientIp) {
+    headers["X-Forwarded-For"] = clientIp;
   }
 
   const response = await axios.post<GraphQLResponse>(

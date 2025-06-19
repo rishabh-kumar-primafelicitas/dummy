@@ -89,6 +89,15 @@ export class QuestController {
     this.questService = new QuestService();
   }
 
+  private getClientIp(req: Request): string | undefined {
+    return (
+      (req.headers["x-forwarded-for"] as string) ||
+      (req.headers["x-real-ip"] as string) ||
+      req.connection?.remoteAddress ||
+      req.socket?.remoteAddress
+    );
+  }
+
   private async processQuestXP(
     userResponse: any,
     eventId: string,
@@ -578,6 +587,8 @@ export class QuestController {
         );
       }
 
+      const clientIp = this.getClientIp(req);
+
       const variables = {
         provider: upperCaseProvider,
         projectId: projectId,
@@ -588,7 +599,8 @@ export class QuestController {
         variables,
         true,
         true,
-        airLyftAuthToken
+        airLyftAuthToken,
+        clientIp
       );
 
       if (response?.errors) {
@@ -671,6 +683,8 @@ export class QuestController {
         throw new ValidationError(errors, "Missing required fields");
       }
 
+      const clientIp = this.getClientIp(req);
+
       const variables = {
         eventId,
         providerId,
@@ -682,7 +696,8 @@ export class QuestController {
         variables,
         true,
         true,
-        airLyftAuthToken
+        airLyftAuthToken,
+        clientIp
       );
 
       console.log("GraphQL response:", response);
@@ -1098,6 +1113,8 @@ export class QuestController {
         );
       }
 
+      const clientIp = this.getClientIp(req);
+
       const variables = {
         eventId,
         provider: upperCaseProvider,
@@ -1109,7 +1126,8 @@ export class QuestController {
         variables,
         true,
         true,
-        airLyftAuthToken
+        airLyftAuthToken,
+        clientIp
       );
 
       if (response?.errors) {
@@ -1268,6 +1286,8 @@ export class QuestController {
         throw new ValidationError(errors, "Missing required fields");
       }
 
+      const clientIp = this.getClientIp(req);
+
       const variables = {
         eventId,
         providerId,
@@ -1279,7 +1299,8 @@ export class QuestController {
         variables,
         true,
         true,
-        airLyftAuthToken
+        airLyftAuthToken,
+        clientIp
       );
 
       if (response?.errors) {
@@ -1362,6 +1383,8 @@ export class QuestController {
         throw new ValidationError(errors, "Missing required fields");
       }
 
+      const clientIp = this.getClientIp(req);
+
       const variables = {
         eventId,
         taskId,
@@ -1372,7 +1395,8 @@ export class QuestController {
         variables,
         true,
         true,
-        airLyftAuthToken
+        airLyftAuthToken,
+        clientIp
       );
 
       if (response?.errors) {
@@ -1440,7 +1464,13 @@ export class QuestController {
         );
       }
 
-      const result = await this.questService.sendEmailOTP(email, authToken);
+      const clientIp = this.getClientIp(req);
+
+      const result = await this.questService.sendEmailOTP(
+        email,
+        authToken,
+        clientIp
+      );
 
       res.status(200).json({
         status: true,
@@ -1524,10 +1554,13 @@ export class QuestController {
         );
       }
 
+      const clientIp = this.getClientIp(req);
+
       const result = await this.questService.verifyEmailOTP(
         email,
         numericCode,
-        authToken
+        authToken,
+        clientIp
       );
 
       res.status(200).json({
@@ -1575,11 +1608,14 @@ export class QuestController {
         );
       }
 
+      const clientIp = this.getClientIp(req);
+
       const result = await this.questService.participateEmailAddressTask(
         eventId,
         taskId,
         providerId,
-        authToken
+        authToken,
+        clientIp
       );
 
       res.status(200).json({

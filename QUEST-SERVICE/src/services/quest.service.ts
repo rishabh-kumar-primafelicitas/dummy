@@ -908,7 +908,8 @@ export class QuestService {
 
   async sendEmailOTP(
     email: string,
-    authToken: string
+    authToken: string,
+    clientIp?: string
   ): Promise<{
     message: string;
     success: boolean;
@@ -917,17 +918,22 @@ export class QuestService {
     // Get user info to retrieve airLyftAuthToken
     const { airLyftAuthToken } = await this.getUserInfo(authToken);
 
-    // Make request to AirLyft API
+    // Make request to AirLyft API with client IP
+    const headers: any = {
+      Authorization: `Bearer ${airLyftAuthToken}`,
+      "api-key": config.airLyft.apiKey,
+      "Content-Type": "application/json",
+    };
+
+    // Add X-Forwarded-For header if clientIp is provided
+    if (clientIp) {
+      headers["X-Forwarded-For"] = clientIp;
+    }
+
     const response = await axios.post(
       `${config.airLyft.restEndpoint}/auth/email/link-account?projectId=${config.airLyft.projectId}`,
       { email },
-      {
-        headers: {
-          Authorization: `Bearer ${airLyftAuthToken}`,
-          "api-key": config.airLyft.apiKey,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers }
     );
 
     return {
@@ -940,7 +946,8 @@ export class QuestService {
   async verifyEmailOTP(
     email: string,
     code: number,
-    authToken: string
+    authToken: string,
+    clientIp?: string
   ): Promise<{
     message: string;
     success: boolean;
@@ -950,16 +957,21 @@ export class QuestService {
     const { airLyftAuthToken } = await this.getUserInfo(authToken);
 
     // Verify OTP with AirLyft API
+    const headers: any = {
+      Authorization: `Bearer ${airLyftAuthToken}`,
+      "api-key": config.airLyft.apiKey,
+      "Content-Type": "application/json",
+    };
+
+    // Add X-Forwarded-For header if clientIp is provided
+    if (clientIp) {
+      headers["X-Forwarded-For"] = clientIp;
+    }
+
     const verifyResponse = await axios.post(
       `${config.airLyft.restEndpoint}/auth/email/verify-link-account?projectId=${config.airLyft.projectId}`,
       { email, code },
-      {
-        headers: {
-          Authorization: `Bearer ${airLyftAuthToken}`,
-          "api-key": config.airLyft.apiKey,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers }
     );
 
     // Check for conflicted user profile
@@ -971,7 +983,8 @@ export class QuestService {
       },
       true,
       true,
-      airLyftAuthToken
+      airLyftAuthToken,
+      clientIp
     );
 
     console.log("Conflict check response:", conflictCheckResponse);
@@ -995,7 +1008,8 @@ export class QuestService {
     eventId: string,
     taskId: string,
     providerId: string,
-    authToken: string
+    authToken: string,
+    clientIp?: string
   ): Promise<{
     message: string;
     success: boolean;
@@ -1014,7 +1028,8 @@ export class QuestService {
       },
       true,
       true,
-      userResponse.airLyftAuthToken
+      userResponse.airLyftAuthToken,
+      clientIp
     );
 
     if (response?.errors) {

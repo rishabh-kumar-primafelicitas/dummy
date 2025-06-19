@@ -42,3 +42,10 @@ export class InternalServerError extends AppError {
     super(message, 500, false);
   }
 }
+
+export class IPRestrictionError extends AppError {
+  constructor(message = "IP restriction violation detected") {
+    super(message, 403);
+    this.name = "IPRestrictionError";
+  }
+}
