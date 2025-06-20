@@ -180,4 +180,31 @@ export class UserProgressController {
       });
     }
   );
+
+  checkMeterVisibility = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+      if (!req.body) {
+        throw new ValidationError(
+          { body: "Request body is required" },
+          "Missing required fields"
+        );
+      }
+
+      const { userId } = req.body;
+
+      if (!userId) {
+        throw new ValidationError(
+          { userId: "User ID is required" },
+          "Missing required fields"
+        );
+      }
+
+      await this.userProgressService.checkMeterVisibility(userId);
+
+      res.status(200).json({
+        status: true,
+        message: "Meter visibility checked successfully",
+      });
+    }
+  );
 }

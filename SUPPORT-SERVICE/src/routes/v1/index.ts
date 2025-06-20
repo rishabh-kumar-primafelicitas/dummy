@@ -15,28 +15,19 @@ import {getSupportManagerStats} from '@controllers/supportManagerStats.controlle
 const router = Router();
 
 // Ticket routes
-router.post('/ticket', generateTicket);                         // POST /api/v1/support/generateTicket
-router.get('/tickets', getTickets);                                  // GET /api/v1/support/getTickets
-router.get('/ticketsAssignedToManager', getTicketsAssignedToManager);                                  // GET /api/v1/support/getTickets
-router.get('/ticket/:id', getTicketById);                            // GET /api/v1/support/getTicket/:id
-router.put('/updateTicket/:id', updateTicket);                          // PUT /api/v1/support/updateTicket/:id
-router.delete('/delete/:id', deleteTicket);                              // DELETE /api/v1/support/delete/:id
+router.post('/ticket', generateTicket);                         
+router.get('/tickets', getTickets);                                  
+// router.get('/ticketsAssignedToManager', getTicketsAssignedToManager);                                
+router.get('/ticket/:id', getTicketById);                           
+router.put('/updateTicket/:id', updateTicket);                         
+router.delete('/delete/:id', deleteTicket);                              
 router.get('/assigned/:managerId', getTicketsByAssignedManager);
 router.get('/tickets/by-user', getUserTickets); 
-
-// Response to ticket
 router.post('/respondToTicket', respondToTicket);
 
-
-// Auth routes
+// Support manager routes
 router.get('/supportManagers', getSupportManagers);
-
-// support manager route
 router.get('/stats/manager', getSupportManagerStats);
-// router.get('/stats/manager', (req, res) => {
-//   console.log('🔥 /stats/manager route hit');
-//   res.json({ msg: 'stats working' });
-// });
 
 
 export default router;

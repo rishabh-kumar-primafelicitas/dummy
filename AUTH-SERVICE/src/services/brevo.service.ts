@@ -101,7 +101,7 @@ export class BrevoService {
     username: string,
     verificationToken: string
   ): Promise<void> {
-    const verificationLink = `${config.appBaseUrl}/api/v1/verify-email/${verificationToken}`;
+    const verificationLink = `${config.services.authServiceUrl}/api/v1/verify-email/${verificationToken}`;
 
     const template = await this.loadTemplate("user-onboarding");
     const htmlContent = this.replaceTemplateVariables(template, {

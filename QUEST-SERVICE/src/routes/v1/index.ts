@@ -1,10 +1,8 @@
 import { QuestController } from "@controllers/quest.controller";
-import { UserProgressController } from "@controllers/user.progress.controller";
 import { Router } from "express";
 
 const router = Router();
 const questController = new QuestController();
-const userProgressController = new UserProgressController();
 
 // Campaigns Routes
 router.get("/tents", questController.fetchCampaigns);
@@ -27,7 +25,8 @@ router.get(
   "/stored-participation/:eventId",
   questController.getUserStoredParticipation
 );
-router.get("/user-progress/:userId", userProgressController.getUserProgress);
+router.get("/user-participations/:userId", questController.getUserAllParticipations);
+router.get("/completed-quests-count/:userId", questController.getCompletedQuestsCount);
 
 // Event Connections Routes
 router.get(
@@ -75,20 +74,6 @@ router.get(
 router.post("/send-otp", questController.sendEmailOTP);
 router.post("/verify-otp", questController.verifyEmailOTP);
 
-router.post("/user-activity", userProgressController.updateUserActivity);
-router.post("/quest-completion", userProgressController.processQuestCompletion);
-router.post("/admin/safety-check", userProgressController.runDailySafetyCheck);
-router.post(
-  "/admin/init-level-rewards",
-  userProgressController.initializeLevelRewards
-);
-router.post(
-  "/admin/trigger-safety-check",
-  userProgressController.triggerSafetyCheck
-);
-router.get(
-  "/admin/scheduler-status",
-  userProgressController.getSchedulerStatus
-);
+
 
 export default router;

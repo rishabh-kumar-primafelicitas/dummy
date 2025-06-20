@@ -1,9 +1,10 @@
 import { Types } from "mongoose";
 import { UserProgressRepository } from "@repositories/user.progress.repository";
-import { QuestRepository } from "@repositories/quest.repository";
 import { IUserProgress, ActivityType } from "@models/interfaces/IUserProgress";
 import { ILevelRewards, RewardType } from "@models/interfaces/ILevelRewards";
 import { logger } from "loggers/logger";
+import { config } from "configs/server.config";
+import axios from "axios";
 
 export interface UserProgressResponse {
   xpMeter: {
@@ -30,11 +31,9 @@ export interface XPUpdateResult {
 
 export class UserProgressService {
   private userProgressRepository: UserProgressRepository;
-  private questRepository: QuestRepository;
 
   constructor() {
     this.userProgressRepository = new UserProgressRepository();
-    this.questRepository = new QuestRepository();
   }
 
   async getUserProgress(userId: string): Promise<UserProgressResponse> {
@@ -151,7 +150,7 @@ export class UserProgressService {
     const userProgress =
       await this.userProgressRepository.findOrCreateUserProgress(userObjectId);
 
-    // Get user's completed quests count from stored participation data
+    // Get user's completed quests count from quest service
     const completedQuestsCount = await this.getCompletedQuestsCount(userId);
 
     const updates: any = {};
@@ -178,18 +177,11 @@ export class UserProgressService {
 
   private async getCompletedQuestsCount(userId: string): Promise<number> {
     try {
-      const userParticipations =
-        await this.questRepository.getUserAllParticipations(userId);
-
-      let totalCompletedQuests = 0;
-      userParticipations.forEach((participation: any) => {
-        const completedInThisTent = participation.participations.filter(
-          (p: any) => p.status === "VALID"
-        ).length;
-        totalCompletedQuests += completedInThisTent;
-      });
-
-      return totalCompletedQuests;
+      const questServiceUrl = config.services.questServiceUrl;
+      const response = await axios.get(
+        `${questServiceUrl}/api/v1/completed-quests-count/${userId}`
+      );
+      return response.data.data.count;
     } catch (error: any) {
       logger.error(
         `Error getting completed quests count for user ${userId}:`,

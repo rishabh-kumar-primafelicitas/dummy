@@ -10,14 +10,9 @@ import {
 } from "@utils/graphql.queries";
 import { config } from "@config/server.config";
 import axios from "axios";
-import {
-  UnauthorizedError,
-  InternalServerError,
-  NotFoundError,
-} from "errors";
+import { UnauthorizedError, InternalServerError, NotFoundError } from "errors";
 import { ValidationError } from "errors/validation.error";
 import { PrerequisiteService } from "./prerequisite.service";
-import { UserProgressService } from "./user.progress.service";
 
 interface UserResponse {
   status: boolean;
@@ -51,15 +46,44 @@ interface UserResponse {
 export class QuestService {
   private questRepository: QuestRepository;
   private prerequisiteService: PrerequisiteService;
-  private userProgressService: UserProgressService;
 
   constructor() {
     this.questRepository = new QuestRepository();
     this.prerequisiteService = new PrerequisiteService();
-    this.userProgressService = new UserProgressService();
   }
 
-  private async processQuestXP(
+  private async refreshUserParticipationData(
+    userId: string,
+    tentId: string
+  ): Promise<void> {
+    try {
+      // Get tent by ID
+      const tent = await this.questRepository.findTentById(
+        new Types.ObjectId(tentId)
+      );
+      if (tent) {
+        // Get user's airLyftAuthToken
+        const userResponse = await axios.get(
+          `${config.services.authServiceUrl}/api/v1/public/me`,
+          { headers: { userid: userId } }
+        );
+
+        if (userResponse.data?.data?.user?.airLyftAuthToken) {
+          // Refresh participation data
+          await this.storeUserTaskParticipation(
+            userId,
+            tent.eventId,
+            userResponse.data.data.user.airLyftAuthToken
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error("Error refreshing participation data:", error);
+      // Don't throw - this is background refresh
+    }
+  }
+
+  async processQuestXP(
     userResponse: any,
     eventId: string,
     taskId: string
@@ -1073,18 +1097,25 @@ export class QuestService {
     tentType?: string
   ): Promise<any> {
     try {
-      // Also update the stored participation data
+      // Store participation data
       await this.refreshUserParticipationData(userId, quest.tentId);
 
-      // Process XP and safety meter updates
-      const xpResult = await this.userProgressService.processQuestCompletion(
-        userId,
-        quest,
-        tentType
+      const xpServiceUrl = config.services.xpServiceUrl;
+      const response = await axios.post(
+        `${xpServiceUrl}/api/v1/quest-completion`,
+        {
+          userId,
+          quest,
+          tentType,
+        }
       );
 
+      const xpResult = response.data.data;
+
       // Check if meters should become visible
-      await this.userProgressService.checkMeterVisibility(userId);
+      await axios.post(`${xpServiceUrl}/api/v1/check-meter-visibility`, {
+        userId,
+      });
 
       return {
         ...xpResult,
@@ -1099,34 +1130,26 @@ export class QuestService {
     }
   }
 
-  private async refreshUserParticipationData(
-    userId: string,
-    tentId: string
-  ): Promise<void> {
+  async getCompletedQuestsCount(userId: string): Promise<number> {
     try {
-      // Get tent by ID
-      const tent = await this.questRepository.findTentById(
-        new Types.ObjectId(tentId)
-      );
-      if (tent) {
-        // Get user's airLyftAuthToken
-        const userResponse = await axios.get(
-          `${config.services.authServiceUrl}/api/v1/public/me`,
-          { headers: { userid: userId } }
-        );
+      const userParticipations =
+        await this.questRepository.getUserAllParticipations(userId);
 
-        if (userResponse.data?.data?.user?.airLyftAuthToken) {
-          // Refresh participation data
-          await this.storeUserTaskParticipation(
-            userId,
-            tent.eventId,
-            userResponse.data.data.user.airLyftAuthToken
-          );
-        }
-      }
+      let totalCompletedQuests = 0;
+      userParticipations.forEach((participation: any) => {
+        const completedInThisTent = participation.participations.filter(
+          (p: any) => p.status === "VALID"
+        ).length;
+        totalCompletedQuests += completedInThisTent;
+      });
+
+      return totalCompletedQuests;
     } catch (error: any) {
-      console.error("Error refreshing participation data:", error);
-      // Don't throw - this is background refresh
+      console.error(
+        `Error getting completed quests count for user ${userId}:`,
+        error
+      );
+      return 0;
     }
   }
 }

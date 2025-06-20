@@ -16,11 +16,7 @@ import { config } from "@config/server.config";
 import axios from "axios";
 import { QuestService } from "@services/quest.service";
 import { ValidationError } from "errors/validation.error";
-import {
-  ConfigurationError,
-  NotFoundError,
-  UnauthorizedError,
-} from "errors";
+import { ConfigurationError, NotFoundError, UnauthorizedError } from "errors";
 import { asyncHandler } from "@utils/async.handler.util";
 import { Types } from "mongoose";
 
@@ -111,11 +107,17 @@ export class QuestController {
       const tent = await this.questService.getTentByEventId(eventId);
 
       if (quest && tent) {
-        return await this.questService.handleQuestCompletionWithXP(
-          userId,
-          quest,
-          tent.tentType?.tentType
+        const xpServiceUrl = config.services.xpServiceUrl;
+        const response = await axios.post(
+          `${xpServiceUrl}/api/v1/quest-completion`,
+          {
+            userId,
+            quest,
+            tentType: tent.tentType?.tentType,
+          }
         );
+
+        return response.data.data;
       }
 
       return null;
@@ -719,7 +721,7 @@ export class QuestController {
       }
 
       // Process XP
-      const xpResult = await this.processQuestXP(userResponse, eventId, taskId);
+      const xpResult = await this.questService.processQuestXP(userResponse, eventId, taskId);
 
       res.status(200).json({
         status: true,
@@ -1320,7 +1322,7 @@ export class QuestController {
       }
 
       // Process XP
-      const xpResult = await this.processQuestXP(userResponse, eventId, taskId);
+      const xpResult = await this.questService.processQuestXP(userResponse, eventId, taskId);
 
       res.status(200).json({
         status: true,
@@ -1416,7 +1418,7 @@ export class QuestController {
       }
 
       // Process XP
-      const xpResult = await this.processQuestXP(userResponse, eventId, taskId);
+      const xpResult = await this.questService.processQuestXP(userResponse, eventId, taskId);
 
       res.status(200).json({
         status: true,
@@ -1738,6 +1740,50 @@ export class QuestController {
         status: true,
         data: quests,
         message: "All quests with prerequisites retrieved successfully",
+      });
+    }
+  );
+
+  getUserAllParticipations = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+      const { userId } = req.params;
+
+      if (!userId) {
+        throw new ValidationError(
+          { userId: "User ID is required" },
+          "Missing required fields"
+        );
+      }
+
+      const participations = await this.questService.getUserAllParticipations(
+        userId
+      );
+
+      res.status(200).json({
+        status: true,
+        data: participations,
+        message: "User participations retrieved successfully",
+      });
+    }
+  );
+
+  getCompletedQuestsCount = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+      const { userId } = req.params;
+
+      if (!userId) {
+        throw new ValidationError(
+          { userId: "User ID is required" },
+          "Missing required fields"
+        );
+      }
+
+      const count = await this.questService.getCompletedQuestsCount(userId);
+
+      res.status(200).json({
+        status: true,
+        data: { count },
+        message: "Completed quests count retrieved successfully",
       });
     }
   );

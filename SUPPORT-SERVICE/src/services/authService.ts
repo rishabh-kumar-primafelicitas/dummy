@@ -1,10 +1,8 @@
-import axios from 'axios';
-import SupportManagerStats from '@models/SupportManagerStats.model';
-import mongoose from 'mongoose';
-
+import {SupportManagerStats, mongoose, axios} from '@utils/imports.util';
 
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL;
 
+// Function to seed support manager stats
 export const seedSupportManagerStats = async (managers: any[]) => {
   for (const manager of managers) {
     const { _id, username } = manager;
@@ -29,16 +27,34 @@ export const seedSupportManagerStats = async (managers: any[]) => {
     console.log(`Stats created for manager ${username}`);
   }
 };
+// Function to fetch support managers with pagination and search
+export const fetchSupportManagers = async (
+  accessToken: string,
+  page: number,
+  limit: number,
+  search: string,
+  status: number | string
+) => {
+  let url = `${AUTH_SERVICE_URL}/api/v1/support-managers?page=${page}&limit=${limit}`;
+  if (status !== undefined && status !== null && status !== '') {
+    url += `&status=${status}`;
+  }
+  if (search && search.trim() !== '') {
+    url += `&search=${encodeURIComponent(search)}`;
+  }
 
-export const fetchSupportManagers = async (accessToken: string, page : number, limit:number, search:string) => {
   try {
-    const response = await axios.get(`${AUTH_SERVICE_URL}/api/v1/support-managers?page=${page}&limit=${limit}&search=${search}`, {
+    const response = await axios.get(`${url}`, {
       headers: {
         Authorization: accessToken,
       },
     });
 
+    console.log('[fetchSupportManagers] Response received:', response.data);
+
     const managers = response.data?.data || [];
+
+    console.log('[fetchSupportManagers] Fetched managers:', managers.length);
 
     // Save or update stats in DB for each manager
     for (const manager of managers) {
@@ -60,7 +76,6 @@ export const fetchSupportManagers = async (accessToken: string, page : number, l
         console.log(`[Stats Created] managerName: ${username}, managerId: ${_id}`);
       }
     }
-
     return response.data;
   } catch (error: unknown) {
     if (axios.isAxiosError(error)) {
@@ -75,6 +90,7 @@ export const fetchSupportManagers = async (accessToken: string, page : number, l
   }
 };
 
+// Function to fetch logged-in user details
 export const fetchLoggedInUser = async (userId: string) => {
   try {
     const url = `${AUTH_SERVICE_URL}/api/v1/public/me`;
@@ -82,7 +98,7 @@ export const fetchLoggedInUser = async (userId: string) => {
 
     const response = await axios.get(url, {
       headers: {
-        userId: userId, 
+        userId: userId,
       },
     });
 

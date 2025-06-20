@@ -70,13 +70,10 @@ export class AuthService {
 
   private async updatePlayerLoginActivity(userId: string): Promise<void> {
     try {
-      const questServiceUrl =
-        config?.questServiceUrl ||
-        process.env.QUEST_SERVICE_URL ||
-        "http://localhost:4089";
+      const xpServiceUrl = config?.services?.xpServiceUrl;
 
       await axios.post(
-        `${questServiceUrl}/api/v1/user-activity`,
+        `${xpServiceUrl}/api/v1/user-activity`,
         {
           userId,
           activityType: "LOGIN",

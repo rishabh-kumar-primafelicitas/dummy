@@ -1,11 +1,18 @@
 import { Request, Response } from 'express';
-import { mongoose, SupportTicket, uploadFile } from '../utils/imports.util';
-import { generateUniqueTicketId } from '@utils/generateTicketId';
-import SupportManagerStats from '@models/SupportManagerStats.model';
-import { fetchLoggedInUser } from '../services/authService';
-import axios from 'axios';
-import { config } from '@config/server.config';
-import SupportTicketModel from '../models/supportTicket.model';
+import {
+  mongoose,
+  SupportTicket,
+  uploadFile,
+  generateUniqueTicketId,
+  SupportManagerStats,
+  fetchLoggedInUser,
+  axios,
+  config,
+  SupportTicketModel,
+  fetchTickets
+} from '../utils/imports.util';
+
+
 // // Submit ticket via a basic form (no file upload logic here)
 // export const submitTicketForm = async (req: Request, res: Response): Promise<void> => {
 //   try {
@@ -145,7 +152,7 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
         : req.body.messages;
     }
 
-    // 🔑 Get userId from headers
+    // Get userId from headers
     const userId = req.headers['userid'] as string;
     if (!userId) {
       console.error('[createTicket] Missing userId in headers');
@@ -153,7 +160,7 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // 👤 Fetch user
+    // Fetch user
     const user = await fetchLoggedInUser(userId);
     console.log('[createTicket] Fetched user:', user);
 
@@ -164,7 +171,7 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // 📊 Fetch support managers
+    // Fetch support managers
     const stats = await SupportManagerStats.find({});
     console.log('[createTicket] Support manager stats count:', stats.length);
 
@@ -174,7 +181,7 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // ⚖️ Choose manager with least load
+    // Choose manager with least load
     const managerWithLeastLoad = stats.reduce((prev, curr) => {
       const prevLoad = prev.openTickets + prev.assignedTickets;
       const currLoad = curr.openTickets + curr.assignedTickets;
@@ -184,16 +191,16 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
     const assignedTo = managerWithLeastLoad.managerId;
     console.log('[createTicket] Assigned to managerId:', assignedTo);
 
-    // 📈 Update manager stats
+    // Update manager stats
     await SupportManagerStats.findOneAndUpdate(
       { managerId: assignedTo },
       { $inc: { openTickets: 1, assignedTickets: 1 } }
     );
 
-    // 🎫 Generate ticket ID
+    // Generate ticket ID
     const ticketId = await generateUniqueTicketId();
 
-    // 📝 Create ticket object
+    // Create ticket object
     const ticketData = {
       ...req.body,
       ticketId,
@@ -217,7 +224,7 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-// 🎯 FINAL CONTROLLER: Generate Ticket (with file upload)
+// FINAL CONTROLLER: Generate Ticket (with file upload)
 export const generateTicket = async (req: Request, res: Response): Promise<void> => {
   try {
     await uploadFile('attachment')(req, res);
@@ -233,40 +240,69 @@ export const generateTicket = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const getTickets = async (_req: Request, res: Response): Promise<void> => {
+// Get all tickets
+
+// export const getTickets = async (req: Request, res: Response): Promise<void> => {
+//   const page = parseInt(req.query.page as string, 10) || 1;
+//   const limit = parseInt(req.query.limit as string, 10) || 10;
+//   const skip = (page - 1) * limit;
+
+//   const search = req.query.search ? (req.query.search as string).trim() : '';
+//   const status = req.query.status === 'New' || req.query.status === 'Assigned' || req.query.status === 'On Hold' || req.query.status === 'Resolved'
+//     ? (req.query.status as string)
+//     : undefined;
+
+//   try {
+//     const result = await fetchTickets({ page, limit, skip, search, status });
+
+//     res.status(200).json({
+//       status: true,
+//       message: 'Tickets retrieved successfully',
+//       data: result.data.length === 0 ? null : result.data,
+//       pagination: result.pagination,
+//     });
+//   } catch (err) {
+//     console.error('Error fetching tickets:', err);
+//     res.status(500).json({
+//       status: false,
+//       message: 'Failed to fetch tickets',
+//     });
+//   }
+// };
+export const getTickets = async (req: Request, res: Response): Promise<void> => {
+  const page = parseInt(req.query.page as string, 10) || 1;
+  const limit = parseInt(req.query.limit as string, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  const search = req.query.search ? (req.query.search as string).trim() : '';
+  const statusParam = req.query.status as string;
+  const status = mongoose.isValidObjectId(statusParam) ? statusParam : undefined;
+
+  // 👇 Extract startDate and endDate from query
+  const startDateStr = req.query.startDate as string;
+  const endDateStr = req.query.endDate as string;
+  const startDate = startDateStr ? new Date(startDateStr) : undefined;
+  const endDate = endDateStr ? new Date(endDateStr) : undefined;
+
   try {
-    const tickets = await SupportTicket.find()
-      .populate({
-        path: 'category',
-        model: 'TicketCategory',
-        select: 'name'
-      })
-      .populate({
-        path: 'status',
-        model: 'TicketStatus',
-        select: 'name',
-      })
-      .populate({
-        path: 'priority',
-        model: 'TicketPriority',
-        select: 'name',
-      })
-      .sort({ createdAt: -1 })
-      .lean(); // Converts documents to plain JS objects (better performance if no Mongoose methods are used)
+    // 👇 Pass them to fetchTickets
+    const result = await fetchTickets({ page, limit, skip, search, status, startDate, endDate });
 
     res.status(200).json({
       status: true,
-      message: 'All existing tickets',
-      data: { tickets },
+      message: 'Tickets retrieved successfully',
+      data: result.data.length === 0 ? null : result.data,
+      pagination: result.pagination,
     });
   } catch (err) {
-    console.error('Error fetching tickets:', err); // Check logs if null or error
+    console.error('Error fetching tickets:', err);
     res.status(500).json({
       status: false,
       message: 'Failed to fetch tickets',
     });
   }
 };
+
 interface UserResponse {
   status: boolean;
   message: string;
@@ -295,6 +331,7 @@ interface UserResponse {
     };
   };
 }
+// Get tickets assigned to the authenticated manager
 export const getTicketsAssignedToManager = async (req: Request, res: Response): Promise<void> => {
   try {
     const authToken = req.headers.authorization;
@@ -470,32 +507,88 @@ export const deleteTicket = async (req: Request, res: Response): Promise<void> =
   }
 };
 
+// export const getTicketsByAssignedManager = async (req: Request, res: Response): Promise<void> => {
+//   const managerId = req.params.managerId;
+//   if (!mongoose.Types.ObjectId.isValid(managerId)) {
+//     res.status(400).json({ status: false, message: 'Invalid manager ID' });
+//     return;
+//   }
 
+//   try {
+//     const tickets = await SupportTicket.find({ assignedTo: managerId })
+//       .populate('status', 'name')
+//       .populate('priority', 'name')
+//       .populate('category', 'name')
+//       .sort({ createdAt: -1 });
+
+//     res.status(200).json({
+//       status: true,
+//       message: 'Tickets assigned to the support manager fetched successfully',
+//       data: { tickets }
+//     });
+//   } catch (err) {
+//     console.error('Error fetching assigned tickets:', err);
+//     res.status(500).json({ status: false, message: 'Failed to fetch assigned tickets' });
+//   }
+// };
 export const getTicketsByAssignedManager = async (req: Request, res: Response): Promise<void> => {
   const managerId = req.params.managerId;
+
   if (!mongoose.Types.ObjectId.isValid(managerId)) {
     res.status(400).json({ status: false, message: 'Invalid manager ID' });
     return;
   }
 
+  const page = parseInt(req.query.page as string, 10) || 1;
+  const limit = parseInt(req.query.limit as string, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  const status = req.query.status && mongoose.isValidObjectId(req.query.status as string)
+    ? req.query.status as string
+    : undefined;
+
+  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+  if (endDate) endDate.setHours(23, 59, 59, 999);
+
+  const query: any = { assignedTo: managerId };
+  if (status) query.status = status;
+  if (startDate && endDate) {
+    query.createdAt = { $gte: startDate, $lte: endDate };
+  }
+
   try {
-    const tickets = await SupportTicket.find({ assignedTo: managerId })
-      .populate('status', 'name')
-      .populate('priority', 'name')
-      .populate('category', 'name')
-      .sort({ createdAt: -1 });
+    const [tickets, total] = await Promise.all([
+      SupportTicket.find(query)
+        .populate('status', 'name')
+        .populate('priority', 'name')
+        .populate('category', 'name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      SupportTicket.countDocuments(query),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
 
     res.status(200).json({
       status: true,
       message: 'Tickets assigned to the support manager fetched successfully',
-      data: { tickets }
+      data: tickets,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: totalPages,
+      },
     });
   } catch (err) {
     console.error('Error fetching assigned tickets:', err);
     res.status(500).json({ status: false, message: 'Failed to fetch assigned tickets' });
   }
 };
-
+// Get tickets created by a specific user
 export const getUserTickets = async (_req: Request, _res: Response) => {
   try {
     const userId = _req.headers['userid'];

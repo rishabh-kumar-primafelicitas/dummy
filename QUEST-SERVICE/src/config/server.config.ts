@@ -26,6 +26,7 @@ const envSchema = z.object({
 
   // Services URLs via API Gateway
   AUTH_SERVICE_URL: z.string().default("http://localhost:3000/auth-service"),
+  XP_SERVICE_URL: z.string().default("http://localhost:3000/xp-service"),
 });
 
 // Parse and validate environment variables
@@ -53,6 +54,7 @@ export const config = {
 
   services: {
     authServiceUrl: env.AUTH_SERVICE_URL,
+    xpServiceUrl: env.XP_SERVICE_URL,
   },
 } as const;
 
