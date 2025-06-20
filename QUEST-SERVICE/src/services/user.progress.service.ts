@@ -45,10 +45,13 @@ export class UserProgressService {
       userProgress.currentLevel
     );
 
+    // Use stage-adjusted XP instead of raw currentXP
+    const currentXPWithStage = userProgress.getCurrentXPWithStage();
+
     return {
       xpMeter: {
         visible: userProgress.xpMeterVisible,
-        currentXP: userProgress.currentXP,
+        currentXP: currentXPWithStage,
         currentLevel: userProgress.currentLevel,
         totalLifetimeXP: userProgress.totalLifetimeXP,
         levelRewards,
@@ -108,10 +111,14 @@ export class UserProgressService {
     const userObjectId = new Types.ObjectId(userId);
     const baseXP = quest.xp || 0;
 
-    // Get current user progress to calculate stage bonus
+    // Get current user progress
     const userProgress =
       await this.userProgressRepository.findOrCreateUserProgress(userObjectId);
-    const stageBonus = userProgress.calculateStageBonus(baseXP);
+
+    // Only apply stage bonus if safety meter is visible
+    const stageBonus = userProgress.safetyMeterVisible
+      ? userProgress.calculateStageBonus(baseXP)
+      : 0;
     const totalXP = baseXP + stageBonus;
 
     // Update XP and check for level up
@@ -120,23 +127,14 @@ export class UserProgressService {
       totalXP
     );
 
-    // Update safety meter (+1 stage for quest completion)
-    await this.userProgressRepository.updateSafetyStage(userObjectId, 1);
+    // Only update safety stage if meter is visible
+    if (userProgress.safetyMeterVisible) {
+      await this.userProgressRepository.updateSafetyStage(userObjectId, 1);
+    }
 
     // Update activity tracking
     await this.updateUserActivity(userId, ActivityType.QUEST_COMPLETED, {
       tentType,
-    });
-
-    // Check if meters should become visible
-    // await this.checkMeterVisibility(userId);
-
-    logger.info(`Quest completion processed for user ${userId}`, {
-      baseXP,
-      stageBonus,
-      totalXP,
-      leveledUp: xpResult.leveledUp,
-      newLevel: xpResult.newLevel,
     });
 
     return {

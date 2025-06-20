@@ -130,7 +130,7 @@ export class AuthController {
         );
       }
 
-      const user = await authService.getUserById(req.user.id as string);
+      const user = await authService.getUserById(req.user.id as string, true);
 
       res.status(200).json({
         status: true,
@@ -154,7 +154,9 @@ export class AuthController {
       }
 
       const userId = req.headers.userid;
-      const user = await authService.getUserById(userId as string);
+
+      // This is public endpoint, so we don't need to give info that is confidential, hence passing false as the second argument
+      const user = await authService.getUserById(userId as string, false);
 
       res.status(200).json({
         status: true,

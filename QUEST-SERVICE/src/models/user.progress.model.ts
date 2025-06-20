@@ -81,15 +81,30 @@ userProgressSchema.methods.calculateStageBonus = function (
   baseXP: number
 ): number {
   switch (this.currentStage) {
-    case SafetyStage.STAGE_3:
+    case 1:
+      return -10; // -10 XP penalty
+    case 2:
+      return -5; // -5 XP penalty
+    case 3:
       return 0; // Base XP Rate
-    case SafetyStage.STAGE_4:
+    case 4:
       return 5; // +5 XP bonus
-    case SafetyStage.STAGE_5:
+    case 5:
       return 10; // +10 XP bonus
     default:
       return 0;
   }
+};
+
+// Method to calculate total XP with stage effects
+userProgressSchema.methods.getCurrentXPWithStage = function (): number {
+  if (!this.safetyMeterVisible) {
+    return this.totalLifetimeXP;
+  }
+
+  const stageBonus = this.calculateStageBonus(0);
+  const adjustedXP = this.totalLifetimeXP + stageBonus;
+  return Math.max(0, adjustedXP); // Ensure never negative
 };
 
 // Method to check if should degrade

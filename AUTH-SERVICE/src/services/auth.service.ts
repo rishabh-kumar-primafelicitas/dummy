@@ -898,7 +898,10 @@ export class AuthService {
     };
   }
 
-  async getUserById(userId: string): Promise<{
+  async getUserById(
+    userId: string,
+    secure: boolean
+  ): Promise<{
     id: string;
     username: string;
     email: string;
@@ -939,7 +942,7 @@ export class AuthService {
         RoleName[key as keyof typeof RoleName] === (roleData as any)?.name
     ) as string;
 
-    return {
+    const userData = {
       id: (user._id as Types.ObjectId).toString(),
       username: user.username,
       email: user.email || "",
@@ -948,14 +951,22 @@ export class AuthService {
       emailVerified: user.emailVerified,
       roleId: (roleData as any)?.roleId || 0,
       roleName: roleNameKey || (roleData as any)?.name || "",
-      walletAddress: user.walletAddress,
-      walletConnected: user.walletConnected,
-      profilePicture: user.profilePicture,
       lastLoginAt: user.lastLoginAt,
-      airLyftAuthToken: user.airLyftAuthToken || null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+
+    if (secure) {
+      return {
+        ...userData,
+        walletAddress: user.walletAddress,
+        walletConnected: user.walletConnected,
+        profilePicture: user.profilePicture,
+        airLyftAuthToken: user.airLyftAuthToken || null,
+      };
+    }
+
+    return userData;
   }
 
   async sendPasswordResetOtp(email: string): Promise<{ message: string }> {

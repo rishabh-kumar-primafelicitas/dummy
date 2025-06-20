@@ -97,11 +97,16 @@ export class UserProgressRepository {
   ): Promise<IUserProgress | null> {
     const userProgress = await this.findOrCreateUserProgress(userId);
     const newStage = Math.max(
-      SafetyStage.STAGE_3,
-      Math.min(SafetyStage.STAGE_5, userProgress.currentStage + stageChange)
+      1,
+      Math.min(5, userProgress.currentStage + stageChange)
     );
 
-    return this.updateUserProgress(userId, { currentStage: newStage });
+    // Update stage and recalculate current XP
+    const updatedProgress = await this.updateUserProgress(userId, {
+      currentStage: newStage,
+    });
+
+    return updatedProgress;
   }
 
   async findUsersForSafetyCheck(): Promise<IUserProgress[]> {

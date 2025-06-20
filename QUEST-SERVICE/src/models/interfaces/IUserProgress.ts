@@ -18,11 +18,14 @@ export interface IUserProgress extends Document {
 
   // Methods
   calculateStageBonus(baseXP: number): number;
+  getCurrentXPWithStage(): number;
   shouldDegrade(): boolean;
   updateLastLogin(): Promise<void>;
 }
 
 export enum SafetyStage {
+  STAGE_1 = 1,
+  STAGE_2 = 2,
   STAGE_3 = 3,
   STAGE_4 = 4,
   STAGE_5 = 5,
