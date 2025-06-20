@@ -129,7 +129,33 @@ export class AuthController {
           "Authentication required"
         );
       }
+
       const user = await authService.getUserById(req.user.id as string);
+
+      res.status(200).json({
+        status: true,
+        message: "User retrieved successfully",
+        data: { user },
+      });
+    }
+  );
+
+  publicMe = asyncHandler(
+    async (
+      req: AuthenticatedRequest,
+      res: Response,
+      _next: NextFunction
+    ): Promise<void> => {
+      if (!req.headers || !req.headers.userid) {
+        throw new ValidationError(
+          { user: "User id is required" },
+          "User id is required"
+        );
+      }
+
+      const userId = req.headers.userid;
+      const user = await authService.getUserById(userId as string);
+
       res.status(200).json({
         status: true,
         message: "User retrieved successfully",
@@ -352,29 +378,6 @@ export class AuthController {
     }
   );
 
-  publicMe = asyncHandler(
-    async (
-      req: AuthenticatedRequest,
-      res: Response,
-      _next: NextFunction
-    ): Promise<void> => {
-      if (!req.headers || !req.headers.userid) {
-        throw new ValidationError(
-          { user: "User id is required" },
-          "User id is required"
-        );
-      }
-
-      const userId = req.headers.userid;
-      const user = await authService.getUserById(userId as string);
-      res.status(200).json({
-        status: true,
-        message: "User retrieved successfully",
-        data: { user },
-      });
-    }
-  );
-
   getAllSupportManager = asyncHandler(
     async (
       req: AuthenticatedRequest,
@@ -389,16 +392,90 @@ export class AuthController {
       const searchTerm = req.query.search
         ? (req.query.search as string).trim()
         : "";
-      const result = await authService.getAllSupportManager({
+
+      // Parse single status code from query parameter
+      let statusCode: number | undefined;
+      if (req.query.status) {
+        const statusParam = parseInt(req.query.status as string, 10);
+
+        if (isNaN(statusParam) || statusParam <= 0) {
+          throw new ValidationError(
+            { status: "Status must be a valid positive number" },
+            "Invalid status code"
+          );
+        }
+
+        statusCode = statusParam;
+      }
+
+      const options: any = {
         page,
         limit,
         skip,
         search: searchTerm,
-      });
+      };
+
+      if (statusCode !== undefined) {
+        options.statusCode = statusCode;
+      }
+
+      const result = await authService.getAllSupportManager(options);
 
       res.status(200).json({
         status: true,
         message: "Support managers retrieved successfully",
+        data: result.data.length === 0 ? null : result.data,
+        pagination: result.pagination,
+      });
+    }
+  );
+
+  getAllPlayers = asyncHandler(
+    async (
+      req: AuthenticatedRequest,
+      res: Response,
+      _next: NextFunction
+    ): Promise<any> => {
+      const page = parseInt(req.query.page as string, 10) || 1;
+      const limit = parseInt(req.query.limit as string, 10) || 10;
+      const skip = (page - 1) * limit;
+
+      // Extract search term
+      const searchTerm = req.query.search
+        ? (req.query.search as string).trim()
+        : "";
+
+      // Parse single status code from query parameter
+      let statusCode: number | undefined;
+      if (req.query.status) {
+        const statusParam = parseInt(req.query.status as string, 10);
+
+        if (isNaN(statusParam) || statusParam <= 0) {
+          throw new ValidationError(
+            { status: "Status must be a valid positive number" },
+            "Invalid status code"
+          );
+        }
+
+        statusCode = statusParam;
+      }
+
+      const options: any = {
+        page,
+        limit,
+        skip,
+        search: searchTerm,
+      };
+
+      if (statusCode !== undefined) {
+        options.statusCode = statusCode;
+      }
+
+      const result = await authService.getAllPlayers(options);
+
+      res.status(200).json({
+        status: true,
+        message: "Players retrieved successfully",
         data: result.data.length === 0 ? null : result.data,
         pagination: result.pagination,
       });
@@ -422,37 +499,6 @@ export class AuthController {
       res.status(200).json({
         status: true,
         message: "Support manager deleted successfully",
-      });
-    }
-  );
-
-  getAllPlayers = asyncHandler(
-    async (
-      req: AuthenticatedRequest,
-      res: Response,
-      _next: NextFunction
-    ): Promise<any> => {
-      const page = parseInt(req.query.page as string, 10) || 1;
-      const limit = parseInt(req.query.limit as string, 10) || 10;
-      const skip = (page - 1) * limit;
-
-      // Extract search term
-      const searchTerm = req.query.search
-        ? (req.query.search as string).trim()
-        : "";
-
-      const result = await authService.getAllPlayers({
-        page,
-        limit,
-        skip,
-        search: searchTerm,
-      });
-
-      res.status(200).json({
-        status: true,
-        message: "Players retrieved successfully",
-        data: result.data.length === 0 ? null : result.data,
-        pagination: result.pagination,
       });
     }
   );

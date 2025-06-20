@@ -7,7 +7,7 @@ export interface IUser extends Document {
   oAuthProvider: string | null;
   oAuthId: string | null;
   roleId: Types.ObjectId;
-  status: UserStatus;
+  status: Types.ObjectId;
   airLyftAuthToken: string | null;
   walletAddress: string | null;
   walletConnected: boolean;
@@ -33,10 +33,10 @@ export interface IUser extends Document {
 }
 
 export enum UserStatus {
-  ACTIVE = "active",
-  INACTIVE = "inactive",
-  SUSPENDED = "suspended",
-  DELETED = "deleted",
+  ACTIVE = "ACTIVE",
+  INACTIVE = "INACTIVE",
+  SUSPENDED = "SUSPENDED",
+  DELETED = "DELETED",
 }
 
 export enum OAuthProvider {

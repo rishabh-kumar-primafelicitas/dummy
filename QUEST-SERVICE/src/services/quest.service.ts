@@ -25,7 +25,7 @@ interface UserResponse {
   data: {
     user: {
       lockedUntil: null | string;
-      _id: string;
+      id: string;
       username: string;
       email: string;
       oAuthProvider: null | string;
@@ -65,7 +65,7 @@ export class QuestService {
     taskId: string
   ): Promise<any> {
     try {
-      const userId = userResponse.data.data.user._id;
+      const userId = userResponse.data.data.user.id;
 
       // Find the quest and tent info for XP processing
       const quest = await this.getQuestByTaskId(taskId);
@@ -121,7 +121,7 @@ export class QuestService {
     }
 
     return {
-      userId: userResponse.data.data.user._id,
+      userId: userResponse.data.data.user.id,
       airLyftAuthToken: userResponse.data.data.user.airLyftAuthToken,
     };
   }
@@ -733,7 +733,7 @@ export class QuestService {
     }
 
     const airLyftAuthToken = userResponse.data.data.user.airLyftAuthToken;
-    const userId = userResponse.data.data.user._id;
+    const userId = userResponse.data.data.user.id;
 
     // Fetch all tents from database
     const tents = await this.getAllTentsWithQuests();

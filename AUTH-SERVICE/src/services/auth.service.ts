@@ -20,6 +20,8 @@ import { logger } from "@utils/logger.util";
 import { BrevoService } from "./brevo.service";
 import { PasswordUtil } from "@utils/password.util";
 import axios from "axios";
+import { User } from "@models/user.model";
+import { ValidationError } from "@utils/errors/validation.error";
 export interface SignupData {
   username: string;
   // email: string;
@@ -37,6 +39,7 @@ export interface AuthResponse {
     id: string;
     username: string;
     email: string;
+    statusCode?: number;
     status: string;
     emailVerified: boolean;
     roleId: number;
@@ -93,276 +96,6 @@ export class AuthService {
     }
   }
 
-  async signup(signupData: SignupData, req: Request): Promise<AuthResponse> {
-    // Check if username already exists
-    const existingUser = await this.authRepository.findUserByUsername(
-      signupData.username
-    );
-
-    if (existingUser) {
-      // If user exists, check password
-      const isPasswordValid = await existingUser.comparePassword(
-        signupData.password
-      );
-
-      if (!isPasswordValid) {
-        throw new UnauthorizedError(
-          "Username already exists with a different password. Please use the correct password or choose a different username."
-        );
-      }
-
-      // If password matches, proceed with login flow
-      // Check if user is locked
-      if (existingUser.isLocked()) {
-        throw new UnauthorizedError(
-          "Account is locked due to multiple failed login attempts"
-        );
-      }
-
-      // Reset login attempts on successful login
-      if (existingUser.loginAttempts && existingUser.loginAttempts > 0) {
-        await existingUser.resetLoginAttempts();
-      }
-
-      // Parse device info
-      const deviceInfo = DeviceUtil.parseDeviceInfo(req);
-
-      // Check if device exists
-      let device = await this.authRepository.findDeviceByUserAndFingerprint(
-        existingUser._id as Types.ObjectId,
-        deviceInfo.fingerprint
-      );
-
-      if (!device) {
-        // Create new device
-        device = await this.authRepository.createDevice({
-          userId: existingUser._id as Types.ObjectId,
-          deviceName: deviceInfo.deviceName,
-          deviceType: deviceInfo.deviceType as DeviceType,
-          os: deviceInfo.os,
-          osVersion: deviceInfo.osVersion,
-          browser: deviceInfo.browser,
-          browserVersion: deviceInfo.browserVersion,
-          fingerprint: deviceInfo.fingerprint,
-          ipAddress: deviceInfo.ipAddress,
-          trusted: false,
-          isActive: true,
-        });
-      }
-
-      // Deactivate all existing sessions for this user
-      await this.authRepository.revokeUserActiveSessions(
-        existingUser._id as Types.ObjectId,
-        "New login session"
-      );
-
-      // Create new session
-      const session = await this.authRepository.createSession({
-        userId: existingUser._id as Types.ObjectId,
-        deviceId: device._id as Types.ObjectId,
-        ipAddress: deviceInfo.ipAddress,
-        userAgent: deviceInfo.userAgent,
-        isActive: true,
-        lastActivityAt: new Date(),
-        refreshTokenExpiresAt: new Date(
-          Date.now() + config.jwt.refreshTokenExpireMs
-        ),
-        accessTokenExpiresAt: new Date(
-          Date.now() + config.jwt.accessTokenExpireMs
-        ),
-        accessToken: "",
-        refreshToken: "",
-      });
-
-      // Generate tokens
-      const accessToken = JWTUtil.generateAccessToken(
-        existingUser._id as Types.ObjectId,
-        session._id as Types.ObjectId,
-        device._id as Types.ObjectId
-      );
-      const refreshToken = JWTUtil.generateRefreshToken(
-        existingUser._id as Types.ObjectId,
-        session._id as Types.ObjectId,
-        device._id as Types.ObjectId
-      );
-
-      // Update session with tokens
-      session.accessToken = accessToken;
-      session.refreshToken = refreshToken;
-      await this.authRepository.updateSession(session);
-
-      // Update last login
-      await this.authRepository.updateUserLastLogin(
-        existingUser._id as Types.ObjectId
-      );
-
-      // Get role info
-      const role = await this.authRepository.findRoleById(
-        existingUser.roleId as Types.ObjectId
-      );
-
-      const roleNameKey = Object.keys(RoleName).find(
-        (key) => RoleName[key as keyof typeof RoleName] === role?.name
-      ) as string;
-
-      if (role?.name === RoleName.PLAYER) {
-        this.updatePlayerLoginActivity(
-          (existingUser._id as Types.ObjectId).toString()
-        );
-      }
-
-      return {
-        created: false,
-        user: {
-          id: (existingUser._id as Types.ObjectId).toString(),
-          username: existingUser.username,
-          email: existingUser.email || "",
-          status: existingUser.status,
-          emailVerified: existingUser.emailVerified,
-          roleId: role?.roleId || 0,
-          roleName: roleNameKey,
-        },
-        tokens: {
-          accessToken,
-          refreshToken,
-        },
-      };
-    }
-
-    // If user doesn't exist, create new user
-    // Get default role
-    const defaultRole = await this.authRepository.findRoleByName(
-      RoleName.PLAYER
-    );
-    if (!defaultRole) {
-      throw new InternalServerError("Default role not found");
-    }
-
-    // Create user
-    const user = await this.authRepository.createUser({
-      username: signupData.username,
-      password: signupData.password,
-      roleId: defaultRole._id as Types.ObjectId,
-      status: UserStatus.ACTIVE,
-      emailVerified: false,
-    });
-
-    if (!user) {
-      throw new InternalServerError("Failed to create user");
-    }
-
-    try {
-      // Get AirLyft authorization token
-      const airLyftToken = await this.airLyftService.getAuthorizationToken(
-        user._id as string
-      );
-
-      // Update user with AirLyft token
-      await this.authRepository.updateUserAirLyftToken(
-        user._id as Types.ObjectId,
-        airLyftToken
-      );
-    } catch (error) {
-      // Delete user if AirLyft fails
-      await this.authRepository.deleteUser(user._id as Types.ObjectId);
-
-      logger.error("Failed to get AirLyft authorization token", {
-        error,
-        userId: user._id,
-      });
-
-      throw new InternalServerError(
-        "Failed to get AirLyft authorization token"
-      );
-    }
-
-    // Parse device info
-    const deviceInfo = DeviceUtil.parseDeviceInfo(req);
-
-    // Create device
-    const device = await this.authRepository.createDevice({
-      userId: user._id as Types.ObjectId,
-      deviceName: deviceInfo.deviceName,
-      deviceType: deviceInfo.deviceType as DeviceType,
-      os: deviceInfo.os,
-      osVersion: deviceInfo.osVersion,
-      browser: deviceInfo.browser,
-      browserVersion: deviceInfo.browserVersion,
-      fingerprint: deviceInfo.fingerprint,
-      ipAddress: deviceInfo.ipAddress,
-      trusted: false,
-      isActive: true,
-    });
-
-    // Create new session
-    const session = await this.authRepository.createSession({
-      userId: user._id as Types.ObjectId,
-      deviceId: device._id as Types.ObjectId,
-      ipAddress: deviceInfo.ipAddress,
-      userAgent: deviceInfo.userAgent,
-      isActive: true,
-      lastActivityAt: new Date(),
-      refreshTokenExpiresAt: new Date(
-        Date.now() + config.jwt.refreshTokenExpireMs
-      ),
-      accessTokenExpiresAt: new Date(
-        Date.now() + config.jwt.accessTokenExpireMs
-      ),
-      accessToken: "",
-      refreshToken: "",
-    });
-
-    // Generate tokens
-    const accessToken = JWTUtil.generateAccessToken(
-      user._id as Types.ObjectId,
-      session._id as Types.ObjectId,
-      device._id as Types.ObjectId
-    );
-    const refreshToken = JWTUtil.generateRefreshToken(
-      user._id as Types.ObjectId,
-      session._id as Types.ObjectId,
-      device._id as Types.ObjectId
-    );
-
-    // Update session with tokens
-    session.accessToken = accessToken;
-    session.refreshToken = refreshToken;
-    await this.authRepository.updateSession(session);
-
-    // Update last login
-    await this.authRepository.updateUserLastLogin(user._id as Types.ObjectId);
-
-    // Get role info
-    const role = await this.authRepository.findRoleById(
-      user.roleId as Types.ObjectId
-    );
-
-    const roleNameKey = Object.keys(RoleName).find(
-      (key) => RoleName[key as keyof typeof RoleName] === role?.name
-    ) as string;
-
-    if (role?.name === RoleName.PLAYER) {
-      this.updatePlayerLoginActivity((user._id as Types.ObjectId).toString());
-    }
-
-    return {
-      created: true,
-      user: {
-        id: (user._id as Types.ObjectId).toString(),
-        username: user.username,
-        email: user.email || "",
-        status: user.status,
-        emailVerified: user.emailVerified,
-        roleId: role?.roleId || 0,
-        roleName: roleNameKey,
-      },
-      tokens: {
-        accessToken,
-        refreshToken,
-      },
-    };
-  }
-
   async verifyEmail(token: string): Promise<{ message: string }> {
     const user =
       await this.authRepository.findUserByEmailVerificationToken(token);
@@ -382,156 +115,18 @@ export class AuthService {
       throw new UnauthorizedError("Verification token has expired.");
     }
 
+    const status = await this.authRepository.findUserStatusByCode(1);
+
     user.emailVerified = true;
     user.emailVerificationToken = null;
     user.emailVerificationExpires = null;
-    if (user.status === UserStatus.INACTIVE) {
-      user.status = UserStatus.ACTIVE;
+    if ((user.status as any).name === UserStatus.INACTIVE) {
+      user.status = status?._id as Types.ObjectId;
     }
     await user.save();
 
     logger.info(`Email verified for user: ${user.email}`);
     return { message: "Email verified successfully." };
-  }
-
-  async login(loginData: LoginData, req: Request): Promise<AuthResponse> {
-    // Find user by email
-    const user = await this.authRepository.findUserByEmail(loginData.email);
-    if (!user) {
-      throw new UnauthorizedError("Invalid email or password");
-    }
-
-    // Check if user is locked
-    if (user.isLocked()) {
-      throw new UnauthorizedError(
-        "Account is locked due to multiple failed login attempts"
-      );
-    }
-
-    // Check password
-    const isPasswordValid = await user.comparePassword(loginData.password);
-    if (!isPasswordValid) {
-      await user.incrementLoginAttempts();
-      throw new UnauthorizedError("Invalid email or password");
-    }
-
-    // Check user status
-    if (user.status !== UserStatus.ACTIVE) {
-      throw new UnauthorizedError("Account is not active");
-    }
-
-    const role = await this.authRepository.findRoleById(
-      user.roleId as Types.ObjectId
-    );
-
-    if (!role) {
-      throw new InternalServerError("User role not found");
-    }
-
-    if (!role.isActive) {
-      throw new UnauthorizedError("User role is not active");
-    }
-
-    // Parse device info
-    const deviceInfo = DeviceUtil.parseDeviceInfo(req);
-
-    // Find or create device
-    let device = await this.authRepository.findDeviceByUserAndFingerprint(
-      user._id as Types.ObjectId,
-      deviceInfo.fingerprint
-    );
-
-    if (!device) {
-      device = await this.authRepository.createDevice({
-        userId: user._id as Types.ObjectId,
-        deviceName: deviceInfo.deviceName,
-        deviceType: deviceInfo.deviceType as DeviceType,
-        os: deviceInfo.os,
-        osVersion: deviceInfo.osVersion,
-        browser: deviceInfo.browser,
-        browserVersion: deviceInfo.browserVersion,
-        fingerprint: deviceInfo.fingerprint,
-        ipAddress: deviceInfo.ipAddress,
-        trusted: false,
-        isActive: true,
-      });
-    } else {
-      await this.authRepository.updateDeviceLastUsed(
-        device._id as Types.ObjectId
-      );
-    }
-
-    // Revoke existing active sessions for this user (single device login)
-    await this.authRepository.revokeUserActiveSessions(
-      user._id as Types.ObjectId,
-      "New login session"
-    );
-
-    // Create new session
-    const session = await this.authRepository.createSession({
-      userId: user._id as Types.ObjectId,
-      deviceId: device._id as Types.ObjectId,
-      ipAddress: deviceInfo.ipAddress,
-      userAgent: deviceInfo.userAgent,
-      isActive: true,
-      lastActivityAt: new Date(),
-      refreshTokenExpiresAt: new Date(
-        Date.now() + config.jwt.refreshTokenExpireMs
-      ),
-      accessTokenExpiresAt: new Date(
-        Date.now() + config.jwt.accessTokenExpireMs
-      ),
-      accessToken: "", // Will be set below
-      refreshToken: "", // Will be set below
-    });
-
-    // Generate tokens
-    const accessToken = JWTUtil.generateAccessToken(
-      user._id as Types.ObjectId,
-      session._id as Types.ObjectId,
-      device._id as Types.ObjectId
-    );
-    const refreshToken = JWTUtil.generateRefreshToken(
-      user._id as Types.ObjectId,
-      session._id as Types.ObjectId,
-      device._id as Types.ObjectId
-    );
-
-    // Update session with tokens
-    session.accessToken = accessToken;
-    session.refreshToken = refreshToken;
-    await this.authRepository.updateSession(session);
-
-    // Reset login attempts and update last login
-    await user.resetLoginAttempts();
-    await this.authRepository.updateUserLastLogin(user._id as Types.ObjectId);
-
-    // Find the enum key corresponding to the role name
-    let roleNameKey = Object.keys(RoleName).find(
-      (key) => RoleName[key as keyof typeof RoleName] === role.name
-    ) as string;
-
-    return {
-      user: {
-        id: (user._id as Types.ObjectId).toString(),
-        username: user.username,
-        email: user.email!,
-        status: user.status,
-        emailVerified: user.emailVerified,
-        roleId: role?.roleId,
-        roleName: roleNameKey,
-      },
-      tokens: {
-        accessToken,
-        refreshToken,
-        // expiresIn: Math.floor(config.jwt.accessTokenExpireMs / 1000),
-      },
-      // device: {
-      //   id: (device._id as Types.ObjectId).toString(),
-      //   name: device.deviceName,
-      //   trusted: device.trusted,
-      // },
-    };
   }
 
   async refreshToken(
@@ -627,7 +222,8 @@ export class AuthService {
         return null;
       }
 
-      const user = await this.authRepository.findUserById(session.userId);
+      // Get user WITHOUT population for auth middleware
+      const user = await User.findById(session.userId).select("-password -__v");
       if (!user) {
         return null;
       }
@@ -641,8 +237,8 @@ export class AuthService {
         user: {
           id: (user._id as Types.ObjectId).toString(),
           username: user.username,
-          email: user.email!,
-          roleId: user.roleId.toString(),
+          email: user.email || "",
+          roleId: (user.roleId as Types.ObjectId).toString(),
         },
         session: {
           id: (session._id as Types.ObjectId).toString(),
@@ -652,93 +248,6 @@ export class AuthService {
     } catch (error) {
       return null;
     }
-  }
-
-  async createSupportManager(userData: {
-    username: string;
-    email: string;
-  }): Promise<{
-    message: string;
-    user: {
-      id: string;
-      username: string;
-      email: string;
-      roleId: number;
-      roleName: string;
-    };
-  }> {
-    // Check if user already exists
-    const existingUser = await this.authRepository.findUserByEmailOrUsername(
-      userData.email,
-      userData.username
-    );
-
-    if (existingUser) {
-      throw new ConflictError(
-        "User with this email or username already exists"
-      );
-    }
-
-    // Get support manager role
-    const supportManagerRole = await this.authRepository.findRoleByName(
-      RoleName.SUPPORT_MANAGER
-    );
-
-    if (!supportManagerRole) {
-      throw new InternalServerError("Support manager role not found");
-    }
-
-    if (!supportManagerRole.isActive) {
-      throw new UnauthorizedError("Support manager role is not active");
-    }
-
-    const password = PasswordUtil.generateRandomPassword();
-    console.log(`Generated password for new support manager: ${password}`);
-    logger.info(
-      `Generated password for new support manager with email: ${userData.email}: ${password}`
-    );
-
-    // Create user with support manager role
-    const newUser = await this.authRepository.createUser({
-      username: userData.username,
-      email: userData.email,
-      password: password,
-      roleId: supportManagerRole._id as Types.ObjectId,
-      status: UserStatus.ACTIVE,
-      emailVerified: true, // Support managers are pre-verified
-    });
-
-    if (newUser) {
-      try {
-        // Send welcome email with credentials
-        await this.brevoService.sendSupportManagerWelcomeEmail(
-          newUser.email!,
-          newUser.username,
-          password
-        );
-        logger.info(`Welcome email sent to ${newUser.email}`);
-      } catch (emailError) {
-        await this.authRepository.deleteUser(newUser._id as Types.ObjectId);
-
-        console.error("Error sending welcome email:", emailError);
-
-        logger.error(`Failed to send welcome email to ${newUser.email}`, {
-          error: emailError,
-        });
-        throw new InternalServerError("Failed to send welcome email");
-      }
-    }
-
-    return {
-      message: "Support manager created successfully",
-      user: {
-        id: (newUser._id as Types.ObjectId).toString(),
-        username: newUser.username,
-        email: newUser.email!,
-        roleId: supportManagerRole.roleId,
-        roleName: "SUPPORT_MANAGER",
-      },
-    };
   }
 
   async forgotPassword(
@@ -752,7 +261,7 @@ export class AuthService {
       throw new NotFoundError("User with this email does not exist");
     }
 
-    if (user.status !== UserStatus.ACTIVE) {
+    if ((user.status as any).name !== UserStatus.ACTIVE) {
       throw new UnauthorizedError("Account is not active");
     }
 
@@ -854,6 +363,601 @@ export class AuthService {
     };
   }
 
+  async signup(signupData: SignupData, req: Request): Promise<AuthResponse> {
+    // Check if username already exists
+    const existingUser = await this.authRepository.findUserByUsername(
+      signupData.username
+    );
+
+    if (existingUser) {
+      // If user exists, check password
+      const isPasswordValid = await existingUser.comparePassword(
+        signupData.password
+      );
+
+      if (!isPasswordValid) {
+        throw new UnauthorizedError(
+          "Username already exists with a different password. Please use the correct password or choose a different username."
+        );
+      }
+
+      // If password matches, proceed with login flow
+      // Check if user is locked
+      if (existingUser.isLocked()) {
+        throw new UnauthorizedError(
+          "Account is locked due to multiple failed login attempts"
+        );
+      }
+
+      // Check if user status is active
+      if ((existingUser.status as any).name !== "ACTIVE") {
+        throw new UnauthorizedError("Account is not active");
+      }
+
+      // Reset login attempts on successful login
+      if (existingUser.loginAttempts && existingUser.loginAttempts > 0) {
+        await existingUser.resetLoginAttempts();
+      }
+
+      // Parse device info
+      const deviceInfo = DeviceUtil.parseDeviceInfo(req);
+
+      // Check if device exists
+      let device = await this.authRepository.findDeviceByUserAndFingerprint(
+        existingUser._id as Types.ObjectId,
+        deviceInfo.fingerprint
+      );
+
+      if (!device) {
+        // Create new device
+        device = await this.authRepository.createDevice({
+          userId: existingUser._id as Types.ObjectId,
+          deviceName: deviceInfo.deviceName,
+          deviceType: deviceInfo.deviceType as DeviceType,
+          os: deviceInfo.os,
+          osVersion: deviceInfo.osVersion,
+          browser: deviceInfo.browser,
+          browserVersion: deviceInfo.browserVersion,
+          fingerprint: deviceInfo.fingerprint,
+          ipAddress: deviceInfo.ipAddress,
+          trusted: false,
+          isActive: true,
+        });
+      }
+
+      // Deactivate all existing sessions for this user
+      await this.authRepository.revokeUserActiveSessions(
+        existingUser._id as Types.ObjectId,
+        "New login session"
+      );
+
+      // Create new session
+      const session = await this.authRepository.createSession({
+        userId: existingUser._id as Types.ObjectId,
+        deviceId: device._id as Types.ObjectId,
+        ipAddress: deviceInfo.ipAddress,
+        userAgent: deviceInfo.userAgent,
+        isActive: true,
+        lastActivityAt: new Date(),
+        refreshTokenExpiresAt: new Date(
+          Date.now() + config.jwt.refreshTokenExpireMs
+        ),
+        accessTokenExpiresAt: new Date(
+          Date.now() + config.jwt.accessTokenExpireMs
+        ),
+        accessToken: "",
+        refreshToken: "",
+      });
+
+      // Generate tokens
+      const accessToken = JWTUtil.generateAccessToken(
+        existingUser._id as Types.ObjectId,
+        session._id as Types.ObjectId,
+        device._id as Types.ObjectId
+      );
+      const refreshToken = JWTUtil.generateRefreshToken(
+        existingUser._id as Types.ObjectId,
+        session._id as Types.ObjectId,
+        device._id as Types.ObjectId
+      );
+
+      // Update session with tokens
+      session.accessToken = accessToken;
+      session.refreshToken = refreshToken;
+      await this.authRepository.updateSession(session);
+
+      // Update last login
+      await this.authRepository.updateUserLastLogin(
+        existingUser._id as Types.ObjectId
+      );
+
+      // Get role info
+      const role = await this.authRepository.findRoleById(
+        existingUser.roleId as Types.ObjectId
+      );
+
+      const roleNameKey = Object.keys(RoleName).find(
+        (key) => RoleName[key as keyof typeof RoleName] === role?.name
+      ) as string;
+
+      if (role?.name === RoleName.PLAYER) {
+        this.updatePlayerLoginActivity(
+          (existingUser._id as Types.ObjectId).toString()
+        );
+      }
+
+      return {
+        created: false,
+        user: {
+          id: (existingUser._id as Types.ObjectId).toString(),
+          username: existingUser.username,
+          email: existingUser.email || "",
+          status: (existingUser.status as any).name,
+          statusCode: (existingUser.status as any).code,
+          emailVerified: existingUser.emailVerified,
+          roleId: role?.roleId || 0,
+          roleName: roleNameKey,
+        },
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
+      };
+    }
+
+    // If user doesn't exist, create new user
+    // Get default role
+    const defaultRole = await this.authRepository.findRoleByName(
+      RoleName.PLAYER
+    );
+    if (!defaultRole) {
+      throw new InternalServerError("Default role not found");
+    }
+
+    // Get active status
+    const activeStatus = await this.authRepository.findUserStatusByCode(1);
+    if (!activeStatus) {
+      throw new InternalServerError("Active status not found");
+    }
+
+    // Create user
+    const user = await this.authRepository.createUser({
+      username: signupData.username,
+      password: signupData.password,
+      roleId: defaultRole._id as Types.ObjectId,
+      status: activeStatus._id as Types.ObjectId,
+      emailVerified: false,
+    });
+
+    if (!user) {
+      throw new InternalServerError("Failed to create user");
+    }
+
+    try {
+      // Get AirLyft authorization token
+      const airLyftToken = await this.airLyftService.getAuthorizationToken(
+        user._id as string
+      );
+
+      // Update user with AirLyft token
+      await this.authRepository.updateUserAirLyftToken(
+        user._id as Types.ObjectId,
+        airLyftToken
+      );
+    } catch (error) {
+      // Delete user if AirLyft fails
+      await this.authRepository.deleteUser(user._id as Types.ObjectId);
+
+      logger.error("Failed to get AirLyft authorization token", {
+        error,
+        userId: user._id,
+      });
+
+      throw new InternalServerError(
+        "Failed to get AirLyft authorization token"
+      );
+    }
+
+    // Parse device info
+    const deviceInfo = DeviceUtil.parseDeviceInfo(req);
+
+    // Create device
+    const device = await this.authRepository.createDevice({
+      userId: user._id as Types.ObjectId,
+      deviceName: deviceInfo.deviceName,
+      deviceType: deviceInfo.deviceType as DeviceType,
+      os: deviceInfo.os,
+      osVersion: deviceInfo.osVersion,
+      browser: deviceInfo.browser,
+      browserVersion: deviceInfo.browserVersion,
+      fingerprint: deviceInfo.fingerprint,
+      ipAddress: deviceInfo.ipAddress,
+      trusted: false,
+      isActive: true,
+    });
+
+    // Create new session
+    const session = await this.authRepository.createSession({
+      userId: user._id as Types.ObjectId,
+      deviceId: device._id as Types.ObjectId,
+      ipAddress: deviceInfo.ipAddress,
+      userAgent: deviceInfo.userAgent,
+      isActive: true,
+      lastActivityAt: new Date(),
+      refreshTokenExpiresAt: new Date(
+        Date.now() + config.jwt.refreshTokenExpireMs
+      ),
+      accessTokenExpiresAt: new Date(
+        Date.now() + config.jwt.accessTokenExpireMs
+      ),
+      accessToken: "",
+      refreshToken: "",
+    });
+
+    // Generate tokens
+    const accessToken = JWTUtil.generateAccessToken(
+      user._id as Types.ObjectId,
+      session._id as Types.ObjectId,
+      device._id as Types.ObjectId
+    );
+    const refreshToken = JWTUtil.generateRefreshToken(
+      user._id as Types.ObjectId,
+      session._id as Types.ObjectId,
+      device._id as Types.ObjectId
+    );
+
+    // Update session with tokens
+    session.accessToken = accessToken;
+    session.refreshToken = refreshToken;
+    await this.authRepository.updateSession(session);
+
+    // Update last login
+    await this.authRepository.updateUserLastLogin(user._id as Types.ObjectId);
+
+    // Get user with populated data
+    const createdUser = await this.authRepository.findUserById(
+      user._id as Types.ObjectId
+    );
+    if (!createdUser) {
+      throw new InternalServerError("Failed to retrieve created user");
+    }
+
+    // Get role info
+    const role = await this.authRepository.findRoleById(
+      createdUser.roleId as Types.ObjectId
+    );
+
+    const roleNameKey = Object.keys(RoleName).find(
+      (key) => RoleName[key as keyof typeof RoleName] === role?.name
+    ) as string;
+
+    if (role?.name === RoleName.PLAYER) {
+      this.updatePlayerLoginActivity((user._id as Types.ObjectId).toString());
+    }
+
+    return {
+      created: true,
+      user: {
+        id: (createdUser._id as Types.ObjectId).toString(),
+        username: createdUser.username,
+        email: createdUser.email || "",
+        status: (createdUser.status as any).name,
+        statusCode: (createdUser.status as any).code,
+        emailVerified: createdUser.emailVerified,
+        roleId: role?.roleId || 0,
+        roleName: roleNameKey,
+      },
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    };
+  }
+
+  async login(loginData: LoginData, req: Request): Promise<AuthResponse> {
+    // Find user by email
+    const user = await this.authRepository.findUserByEmail(loginData.email);
+    if (!user) {
+      throw new UnauthorizedError("Invalid email or password");
+    }
+
+    // Check if user is locked
+    if (user.isLocked()) {
+      throw new UnauthorizedError(
+        "Account is locked due to multiple failed login attempts"
+      );
+    }
+
+    // Check password
+    const isPasswordValid = await user.comparePassword(loginData.password);
+    if (!isPasswordValid) {
+      await user.incrementLoginAttempts();
+      throw new UnauthorizedError("Invalid email or password");
+    }
+
+    // Check user status using populated data
+    if ((user.status as any).name !== "ACTIVE") {
+      throw new UnauthorizedError("Account is not active");
+    }
+
+    const role = await this.authRepository.findRoleById(
+      user.roleId as Types.ObjectId
+    );
+
+    if (!role) {
+      throw new InternalServerError("User role not found");
+    }
+
+    if (!role.isActive) {
+      throw new UnauthorizedError("User role is not active");
+    }
+
+    // Parse device info
+    const deviceInfo = DeviceUtil.parseDeviceInfo(req);
+
+    // Find or create device
+    let device = await this.authRepository.findDeviceByUserAndFingerprint(
+      user._id as Types.ObjectId,
+      deviceInfo.fingerprint
+    );
+
+    if (!device) {
+      device = await this.authRepository.createDevice({
+        userId: user._id as Types.ObjectId,
+        deviceName: deviceInfo.deviceName,
+        deviceType: deviceInfo.deviceType as DeviceType,
+        os: deviceInfo.os,
+        osVersion: deviceInfo.osVersion,
+        browser: deviceInfo.browser,
+        browserVersion: deviceInfo.browserVersion,
+        fingerprint: deviceInfo.fingerprint,
+        ipAddress: deviceInfo.ipAddress,
+        trusted: false,
+        isActive: true,
+      });
+    } else {
+      await this.authRepository.updateDeviceLastUsed(
+        device._id as Types.ObjectId
+      );
+    }
+
+    // Revoke existing active sessions for this user (single device login)
+    await this.authRepository.revokeUserActiveSessions(
+      user._id as Types.ObjectId,
+      "New login session"
+    );
+
+    // Create new session
+    const session = await this.authRepository.createSession({
+      userId: user._id as Types.ObjectId,
+      deviceId: device._id as Types.ObjectId,
+      ipAddress: deviceInfo.ipAddress,
+      userAgent: deviceInfo.userAgent,
+      isActive: true,
+      lastActivityAt: new Date(),
+      refreshTokenExpiresAt: new Date(
+        Date.now() + config.jwt.refreshTokenExpireMs
+      ),
+      accessTokenExpiresAt: new Date(
+        Date.now() + config.jwt.accessTokenExpireMs
+      ),
+      accessToken: "", // Will be set below
+      refreshToken: "", // Will be set below
+    });
+
+    // Generate tokens
+    const accessToken = JWTUtil.generateAccessToken(
+      user._id as Types.ObjectId,
+      session._id as Types.ObjectId,
+      device._id as Types.ObjectId
+    );
+    const refreshToken = JWTUtil.generateRefreshToken(
+      user._id as Types.ObjectId,
+      session._id as Types.ObjectId,
+      device._id as Types.ObjectId
+    );
+
+    // Update session with tokens
+    session.accessToken = accessToken;
+    session.refreshToken = refreshToken;
+    await this.authRepository.updateSession(session);
+
+    // Reset login attempts and update last login
+    await user.resetLoginAttempts();
+    await this.authRepository.updateUserLastLogin(user._id as Types.ObjectId);
+
+    // Find the enum key corresponding to the role name
+    let roleNameKey = Object.keys(RoleName).find(
+      (key) => RoleName[key as keyof typeof RoleName] === role.name
+    ) as string;
+
+    if (role?.name === RoleName.PLAYER) {
+      this.updatePlayerLoginActivity((user._id as Types.ObjectId).toString());
+    }
+
+    return {
+      user: {
+        id: (user._id as Types.ObjectId).toString(),
+        username: user.username,
+        email: user.email!,
+        status: (user.status as any).name,
+        statusCode: (user.status as any).code,
+        emailVerified: user.emailVerified,
+        roleId: role?.roleId,
+        roleName: roleNameKey,
+      },
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    };
+  }
+
+  async createSupportManager(userData: {
+    username: string;
+    email: string;
+  }): Promise<{
+    message: string;
+    user: {
+      id: string;
+      username: string;
+      email: string;
+      roleId: number;
+      roleName: string;
+      status: string;
+      statusCode: number;
+    };
+  }> {
+    // Check if user already exists
+    const existingUser = await this.authRepository.findUserByEmailOrUsername(
+      userData.email,
+      userData.username
+    );
+
+    if (existingUser) {
+      throw new ConflictError(
+        "User with this email or username already exists"
+      );
+    }
+
+    // Get support manager role
+    const supportManagerRole = await this.authRepository.findRoleByName(
+      RoleName.SUPPORT_MANAGER
+    );
+
+    if (!supportManagerRole) {
+      throw new InternalServerError("Support manager role not found");
+    }
+
+    if (!supportManagerRole.isActive) {
+      throw new UnauthorizedError("Support manager role is not active");
+    }
+
+    // Get active status
+    const activeStatus = await this.authRepository.findUserStatusByCode(1);
+    if (!activeStatus) {
+      throw new InternalServerError("Active status not found");
+    }
+
+    const password = PasswordUtil.generateRandomPassword();
+    console.log(`Generated password for new support manager: ${password}`);
+    logger.info(
+      `Generated password for new support manager with email: ${userData.email}: ${password}`
+    );
+
+    // Create user with support manager role
+    const newUser = await this.authRepository.createUser({
+      username: userData.username,
+      email: userData.email,
+      password: password,
+      roleId: supportManagerRole._id as Types.ObjectId,
+      status: activeStatus._id as Types.ObjectId,
+      emailVerified: true, // Support managers are pre-verified
+    });
+
+    if (newUser) {
+      try {
+        // Send welcome email with credentials
+        await this.brevoService.sendSupportManagerWelcomeEmail(
+          newUser.email!,
+          newUser.username,
+          password
+        );
+        logger.info(`Welcome email sent to ${newUser.email}`);
+      } catch (emailError) {
+        await this.authRepository.deleteUser(newUser._id as Types.ObjectId);
+
+        console.error("Error sending welcome email:", emailError);
+
+        logger.error(`Failed to send welcome email to ${newUser.email}`, {
+          error: emailError,
+        });
+        throw new InternalServerError("Failed to send welcome email");
+      }
+    }
+
+    // Get created user with populated data
+    const createdUser = await this.authRepository.findUserById(
+      newUser._id as Types.ObjectId
+    );
+    if (!createdUser) {
+      throw new InternalServerError("Failed to retrieve created user");
+    }
+
+    return {
+      message: "Support manager created successfully",
+      user: {
+        id: (createdUser._id as Types.ObjectId).toString(),
+        username: createdUser.username,
+        email: createdUser.email!,
+        roleId: supportManagerRole.roleId,
+        roleName: "SUPPORT_MANAGER",
+        status: (createdUser.status as any).name,
+        statusCode: (createdUser.status as any).code,
+      },
+    };
+  }
+
+  async getUserById(userId: string): Promise<{
+    id: string;
+    username: string;
+    email: string;
+    status: string;
+    statusCode: number;
+    emailVerified: boolean;
+    roleId: number;
+    roleName: string;
+    walletAddress?: string | null;
+    walletConnected?: boolean;
+    profilePicture?: string | null;
+    lastLoginAt?: Date | null;
+    airLyftAuthToken?: string | null;
+    createdAt?: Date;
+    updatedAt?: Date;
+  }> {
+    const user = await this.authRepository.findUserById(
+      new Types.ObjectId(userId)
+    );
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    // Get role details if not populated
+    let roleData = user.roleId;
+    // if (
+    //   typeof user.roleId === "string" ||
+    //   user.roleId instanceof Types.ObjectId
+    // ) {
+    //   roleData = await this.authRepository.findRoleById(
+    //     user.roleId as Types.ObjectId
+    //   );
+    // }
+
+    // Find the enum key corresponding to the role name
+    const roleNameKey = Object.keys(RoleName).find(
+      (key) =>
+        RoleName[key as keyof typeof RoleName] === (roleData as any)?.name
+    ) as string;
+
+    return {
+      id: (user._id as Types.ObjectId).toString(),
+      username: user.username,
+      email: user.email || "",
+      status: (user.status as any).name,
+      statusCode: (user.status as any).code,
+      emailVerified: user.emailVerified,
+      roleId: (roleData as any)?.roleId || 0,
+      roleName: roleNameKey || (roleData as any)?.name || "",
+      walletAddress: user.walletAddress,
+      walletConnected: user.walletConnected,
+      profilePicture: user.profilePicture,
+      lastLoginAt: user.lastLoginAt,
+      airLyftAuthToken: user.airLyftAuthToken || null,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
   async sendPasswordResetOtp(email: string): Promise<{ message: string }> {
     // Find user by email
     const user = await this.authRepository.findUserByEmail(email);
@@ -862,7 +966,7 @@ export class AuthService {
     }
 
     // Check if user account is active
-    if (user.status !== UserStatus.ACTIVE) {
+    if ((user.status as any).name !== UserStatus.ACTIVE) {
       throw new UnauthorizedError("Account is not active");
     }
 
@@ -932,21 +1036,12 @@ export class AuthService {
     };
   }
 
-  async getUserById(userId: string) {
-    const user = await this.authRepository.findUserById(
-      new Types.ObjectId(userId)
-    );
-    if (!user) {
-      throw new NotFoundError("User not found");
-    }
-    return user;
-  }
-
   async getAllSupportManager(options?: {
     page?: number;
     limit?: number;
     skip?: number;
     search?: string;
+    statusCode?: number;
   }): Promise<{
     data: IUser[];
     pagination?: {
@@ -962,13 +1057,73 @@ export class AuthService {
       return { data: supportManagers };
     }
 
-    const { page = 1, limit = 10, skip = 0, search = "" } = options;
+    const { page = 1, limit = 10, skip = 0, search = "", statusCode } = options;
+
+    // Validate status code exists in database
+    if (statusCode !== undefined) {
+      const isValid = await this.authRepository.validateStatusCode(statusCode);
+      if (!isValid) {
+        throw new ValidationError(
+          { status: "Invalid status code provided" },
+          "Invalid status code"
+        );
+      }
+    }
 
     const result = await this.authRepository.getAllSuportManager({
       page,
       limit,
       skip,
       search,
+      statusCode,
+    });
+
+    return {
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }
+
+  async getAllPlayers(options?: {
+    page?: number;
+    limit?: number;
+    skip?: number;
+    search?: string;
+    statusCode?: number;
+  }): Promise<{
+    data: IUser[];
+    pagination?: {
+      total: number;
+      page: number;
+      limit: number;
+      pages: number;
+    };
+  }> {
+    if (!options) {
+      // Legacy behavior - return all without pagination
+      const players = await this.authRepository.getAllPlayers();
+      return { data: players };
+    }
+
+    const { page = 1, limit = 10, skip = 0, search = "", statusCode } = options;
+
+    // Validate status code exists in database
+    if (statusCode !== undefined) {
+      const isValid = await this.authRepository.validateStatusCode(statusCode);
+      if (!isValid) {
+        throw new ValidationError(
+          { status: "Invalid status code provided" },
+          "Invalid status code"
+        );
+      }
+    }
+
+    const result = await this.authRepository.getAllPlayers({
+      page,
+      limit,
+      skip,
+      search,
+      statusCode,
     });
 
     return {
@@ -993,41 +1148,6 @@ export class AuthService {
 
     // soft‐delete by status
     await this.authRepository.softDeleteUser(objId);
-  }
-
-  async getAllPlayers(options?: {
-    page?: number;
-    limit?: number;
-    skip?: number;
-    search?: string;
-  }): Promise<{
-    data: IUser[];
-    pagination?: {
-      total: number;
-      page: number;
-      limit: number;
-      pages: number;
-    };
-  }> {
-    if (!options) {
-      // Legacy behavior - return all without pagination
-      const players = await this.authRepository.getAllPlayers();
-      return { data: players };
-    }
-
-    const { page = 1, limit = 10, skip = 0, search = "" } = options;
-
-    const result = await this.authRepository.getAllPlayers({
-      page,
-      limit,
-      skip,
-      search,
-    });
-
-    return {
-      data: result.data,
-      pagination: result.pagination,
-    };
   }
 
   async deletePlayer(userId: string): Promise<void> {

@@ -50,9 +50,10 @@ const userSchema = new Schema<IUser>(
       required: [true, "Role is required"],
     },
     status: {
-      type: String,
-      enum: Object.values(UserStatus),
-      default: UserStatus.ACTIVE,
+      type: Schema.Types.ObjectId,
+      ref: "UserStatus",
+      required: [true, "Status is required"],
+      index: true,
     },
     airLyftAuthToken: {
       type: String,

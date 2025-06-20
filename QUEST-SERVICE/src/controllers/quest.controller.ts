@@ -104,7 +104,7 @@ export class QuestController {
     taskId: string
   ): Promise<any> {
     try {
-      const userId = userResponse.data.data.user._id;
+      const userId = userResponse.data.data.user.id;
 
       // Find the quest and tent info for XP processing
       const quest = await this.questService.getQuestByTaskId(taskId);

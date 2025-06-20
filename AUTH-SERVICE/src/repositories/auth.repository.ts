@@ -3,7 +3,7 @@ import { User } from "@models/user.model";
 import { Device } from "@models/device.model";
 import { Session } from "@models/session.model";
 import { Role } from "@models/role.model";
-import { IUser, UserStatus } from "@models/interfaces/IUser";
+import { IUser } from "@models/interfaces/IUser";
 import { IDevice, DeviceType } from "@models/interfaces/IDevice";
 import { ISession } from "@models/interfaces/ISession";
 import { IRole, RoleName } from "@models/interfaces/IRole";
@@ -11,13 +11,14 @@ import { Otp } from "@models/otp.model";
 import { IOtp } from "@models/interfaces/IOtp";
 import bcrypt from "bcryptjs";
 import { RegexUtil } from "@utils/regex.util";
+import { UserStatus } from "@models/user.status.model";
 
 export interface CreateUserData {
   username: string;
   email?: string;
   password: string;
   roleId: Types.ObjectId;
-  status: UserStatus;
+  status: Types.ObjectId;
   emailVerified: boolean;
   emailVerificationToken?: string | null;
   emailVerificationExpires?: Date | null;
@@ -60,7 +61,10 @@ export interface CreateOtpData {
 export class AuthRepository {
   // User operations
   async findUserByEmail(email: string): Promise<IUser | null> {
-    return User.findOne({ email }).select("+password");
+    return User.findOne({ email })
+      .select("+password")
+      .populate("status", "code name")
+      .populate("roleId", "name roleId");
   }
 
   async findUserByEmailOrUsername(
@@ -73,11 +77,17 @@ export class AuthRepository {
   }
 
   async findUserByUsername(username: string): Promise<IUser | null> {
-    return User.findOne({ username }).select("+password");
+    return User.findOne({ username })
+      .select("+password")
+      .populate("status", "code name")
+      .populate("roleId", "name roleId");
   }
 
   async findUserById(userId: Types.ObjectId): Promise<IUser | null> {
-    return User.findById(userId).select("+airLyftAuthToken -__v");
+    return User.findById(userId)
+      .select("+airLyftAuthToken -__v")
+      .populate("status", "code name")
+      .populate("roleId", "name roleId");
   }
 
   async findRoleById(roleId: Types.ObjectId): Promise<IRole | null> {
@@ -235,7 +245,10 @@ export class AuthRepository {
   }
 
   async softDeleteUser(id: Types.ObjectId): Promise<void> {
-    await User.updateOne({ _id: id }, { status: UserStatus.INACTIVE });
+    const inactiveStatus = await this.findUserStatusByName("INACTIVE");
+    if (inactiveStatus) {
+      await User.updateOne({ _id: id }, { status: inactiveStatus._id });
+    }
   }
 
   // OTP operations
@@ -311,71 +324,113 @@ export class AuthRepository {
     limit?: number;
     skip?: number;
     search?: string;
+    statusCode?: number;
   }): Promise<any> {
-    if (!options) {
-      // Legacy behavior - return all support managers
-      const supportManagerRole = await Role.findOne({
-        name: RoleName.SUPPORT_MANAGER,
-      });
-
-      if (!supportManagerRole) {
-        return [];
-      }
-
-      return await User.find({
-        roleId: supportManagerRole._id,
-        status: { $ne: UserStatus.DELETED },
-      })
-        .select("-password -__v")
-        .lean();
-    }
-
-    const { page = 1, limit = 10, skip = 0, search = "" } = options;
-
     const supportManagerRole = await Role.findOne({
       name: RoleName.SUPPORT_MANAGER,
     });
 
     if (!supportManagerRole) {
-      return {
-        data: [],
-        pagination: {
-          total: 0,
-          page,
-          limit,
-          pages: 0,
-        },
-      };
+      return options
+        ? {
+            data: [],
+            pagination: {
+              total: 0,
+              page: options.page || 1,
+              limit: options.limit || 10,
+              pages: 0,
+            },
+          }
+        : [];
     }
 
-    // Build base filter
-    const baseFilter = {
+    // Get deleted status to always exclude it
+    const deletedStatus = await this.findUserStatusByName("DELETED");
+
+    // Build base match stage
+    const baseMatch: any = {
       roleId: supportManagerRole._id,
-      status: { $ne: UserStatus.DELETED },
-    } as const;
+    };
 
-    // Create filters with proper typing using RegexUtil
-    const filters =
-      search.length > 0
-        ? {
-            ...baseFilter,
-            $or: RegexUtil.createMultiFieldSearchConditions(search, [
-              "username",
-              "email",
-            ]),
-          }
-        : baseFilter;
+    // Handle status filtering
+    if (options?.statusCode) {
+      // Get status ObjectId for the provided status code
+      const statusObjectId = await this.getStatusObjectIdByCode(
+        options.statusCode
+      );
+      if (statusObjectId) {
+        // Check if the requested status is DELETED
+        if (deletedStatus && statusObjectId.equals(deletedStatus._id)) {
+          // If someone tries to filter by DELETED status, return empty results
+          baseMatch._id = { $exists: false }; // This will match no documents
+        } else {
+          // Filter by specific status (automatically excludes deleted)
+          baseMatch.status = statusObjectId;
+        }
+      }
+    } else {
+      // No specific status requested - exclude deleted users
+      baseMatch.status = { $ne: deletedStatus?._id };
+    }
 
-    // Get total count
-    const totalDocuments = await User.countDocuments(filters);
+    // Add search conditions if provided
+    if (options?.search && options.search.length > 0) {
+      const searchRegex = RegexUtil.createSearchRegex(options.search);
+      baseMatch.$or = [{ username: searchRegex }, { email: searchRegex }];
+    }
 
-    // Get paginated data
-    const supportManagers = await User.find(filters)
-      .select("-password -__v")
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .lean();
+    // Build aggregation pipeline
+    const pipeline: any[] = [
+      // Match stage
+      { $match: baseMatch },
+
+      // Lookup status
+      {
+        $lookup: {
+          from: "user_statuses",
+          localField: "status",
+          foreignField: "_id",
+          as: "statusInfo",
+        },
+      },
+
+      // Project only the required fields
+      {
+        $project: {
+          _id: 1,
+          username: 1,
+          email: 1,
+          status: { $arrayElemAt: ["$statusInfo.name", 0] },
+          statusCode: { $arrayElemAt: ["$statusInfo.code", 0] },
+          createdAt: 1,
+          updatedAt: 1,
+          lastLoginAt: 1,
+        },
+      },
+
+      // Sort
+      { $sort: { createdAt: -1 } },
+    ];
+
+    if (!options) {
+      // Legacy behavior - return all support managers
+      const supportManagers = await User.aggregate(pipeline);
+      return supportManagers;
+    }
+
+    const { page = 1, limit = 10, skip = 0 } = options;
+
+    // Get total count using the same match conditions
+    const countPipeline = [{ $match: baseMatch }, { $count: "total" }];
+
+    const countResult = await User.aggregate(countPipeline);
+    const totalDocuments = countResult[0]?.total || 0;
+
+    // Add pagination to main pipeline
+    pipeline.push({ $skip: skip }, { $limit: limit });
+
+    // Execute aggregation
+    const supportManagers = await User.aggregate(pipeline);
 
     return {
       data: supportManagers,
@@ -394,71 +449,113 @@ export class AuthRepository {
     limit?: number;
     skip?: number;
     search?: string;
+    statusCode?: number;
   }): Promise<any> {
-    if (!options) {
-      // Legacy behavior - return all players
-      const playerRole = await Role.findOne({
-        name: RoleName.PLAYER,
-      });
-
-      if (!playerRole) {
-        return [];
-      }
-
-      return await User.find({
-        roleId: playerRole._id,
-        status: { $ne: UserStatus.DELETED },
-      })
-        .select("-password -__v")
-        .lean();
-    }
-
-    const { page = 1, limit = 10, skip = 0, search = "" } = options;
-
     const playerRole = await Role.findOne({
       name: RoleName.PLAYER,
     });
 
     if (!playerRole) {
-      return {
-        data: [],
-        pagination: {
-          total: 0,
-          page,
-          limit,
-          pages: 0,
-        },
-      };
+      return options
+        ? {
+            data: [],
+            pagination: {
+              total: 0,
+              page: options.page || 1,
+              limit: options.limit || 10,
+              pages: 0,
+            },
+          }
+        : [];
     }
 
-    // Build base filter
-    const baseFilter = {
+    // Get deleted status to always exclude it
+    const deletedStatus = await this.findUserStatusByName("DELETED");
+
+    // Build base match stage
+    const baseMatch: any = {
       roleId: playerRole._id,
-      status: { $ne: UserStatus.DELETED },
-    } as const;
+    };
 
-    // Create filters with proper typing using RegexUtil
-    const filters =
-      search.length > 0
-        ? {
-            ...baseFilter,
-            $or: RegexUtil.createMultiFieldSearchConditions(search, [
-              "username",
-              "email",
-            ]),
-          }
-        : baseFilter;
+    // Handle status filtering
+    if (options?.statusCode) {
+      // Get status ObjectId for the provided status code
+      const statusObjectId = await this.getStatusObjectIdByCode(
+        options.statusCode
+      );
+      if (statusObjectId) {
+        // Check if the requested status is DELETED
+        if (deletedStatus && statusObjectId.equals(deletedStatus._id)) {
+          // If someone tries to filter by DELETED status, return empty results
+          baseMatch._id = { $exists: false }; // This will match no documents
+        } else {
+          // Filter by specific status (automatically excludes deleted)
+          baseMatch.status = statusObjectId;
+        }
+      }
+    } else {
+      // No specific status requested - exclude deleted users
+      baseMatch.status = { $ne: deletedStatus?._id };
+    }
 
-    // Get total count
-    const totalDocuments = await User.countDocuments(filters);
+    // Add search conditions if provided
+    if (options?.search && options.search.length > 0) {
+      const searchRegex = RegexUtil.createSearchRegex(options.search);
+      baseMatch.$or = [{ username: searchRegex }, { email: searchRegex }];
+    }
 
-    // Get paginated data
-    const players = await User.find(filters)
-      .select("-password -__v")
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .lean();
+    // Build aggregation pipeline
+    const pipeline: any[] = [
+      // Match stage
+      { $match: baseMatch },
+
+      // Lookup status
+      {
+        $lookup: {
+          from: "user_statuses",
+          localField: "status",
+          foreignField: "_id",
+          as: "statusInfo",
+        },
+      },
+
+      // Project to exclude unwanted fields and temporary arrays
+      {
+        $project: {
+          _id: 1,
+          username: 1,
+          email: 1,
+          status: { $arrayElemAt: ["$statusInfo.name", 0] },
+          statusCode: { $arrayElemAt: ["$statusInfo.code", 0] },
+          createdAt: 1,
+          updatedAt: 1,
+          lastLoginAt: 1,
+        },
+      },
+
+      // Sort
+      { $sort: { createdAt: -1 } },
+    ];
+
+    if (!options) {
+      // Legacy behavior - return all players
+      const players = await User.aggregate(pipeline);
+      return players;
+    }
+
+    const { page = 1, limit = 10, skip = 0 } = options;
+
+    // Get total count using the same match conditions
+    const countPipeline = [{ $match: baseMatch }, { $count: "total" }];
+
+    const countResult = await User.aggregate(countPipeline);
+    const totalDocuments = countResult[0]?.total || 0;
+
+    // Add pagination to main pipeline
+    pipeline.push({ $skip: skip }, { $limit: limit });
+
+    // Execute aggregation
+    const players = await User.aggregate(pipeline);
 
     return {
       data: players,
@@ -469,5 +566,39 @@ export class AuthRepository {
         pages: Math.ceil(totalDocuments / limit),
       },
     };
+  }
+
+  // Helper method to get single status ObjectId by code
+  async getStatusObjectIdByCode(
+    statusCode: number
+  ): Promise<Types.ObjectId | null> {
+    const status = await UserStatus.findOne({
+      code: statusCode,
+      isActive: true,
+    }).select("_id");
+
+    return status ? (status._id as Types.ObjectId) : null;
+  }
+
+  // Helper method to validate single status code
+  async validateStatusCode(statusCode: number): Promise<boolean> {
+    const status = await UserStatus.findOne({
+      code: statusCode,
+      isActive: true,
+      name: { $ne: "DELETED" }, // Don't allow DELETED status to be considered valid
+    });
+
+    return !!status;
+  }
+
+  async findUserStatusByCode(code: number): Promise<any> {
+    return await UserStatus.findOne({ code, isActive: true });
+  }
+
+  async findUserStatusByName(name: string): Promise<any> {
+    return await UserStatus.findOne({
+      name: name.toUpperCase(),
+      isActive: true,
+    });
   }
 }
