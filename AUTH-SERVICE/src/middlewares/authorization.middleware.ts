@@ -1,6 +1,6 @@
 import { Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "./auth.middleware";
-import { ForbiddenError } from "@utils/errors/index";
+import { ForbiddenError } from "errors/index";
 import { AuthRepository } from "@repositories/auth.repository";
 import { RoleName } from "@models/interfaces/IRole";
 import { Types } from "mongoose";

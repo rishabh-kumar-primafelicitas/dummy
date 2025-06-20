@@ -3,7 +3,7 @@ import { JWTUtil } from "@utils/jwt.util";
 import { DeviceUtil } from "@utils/device.util";
 import { AuthService } from "@services/auth.service";
 import { AuthRepository } from "@repositories/auth.repository";
-import { UnauthorizedError } from "@utils/errors/index";
+import { UnauthorizedError } from "errors/index";
 
 export interface AuthenticatedRequest extends Request {
   user?: {

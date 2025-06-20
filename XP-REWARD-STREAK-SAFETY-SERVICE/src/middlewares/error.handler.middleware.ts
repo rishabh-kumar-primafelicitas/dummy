@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { logger } from "loggers/logger";
-import { AppError } from "errors/app.error";
-import { ValidationError } from "errors/validation.error";
+import { logger } from "../loggers/logger";
+import { AppError } from "../errors/app.error";
+import { ValidationError } from "../errors/validation.error";
 
 export const errorHandler = (
   err: Error,

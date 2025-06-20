@@ -6,31 +6,37 @@ const router = Router();
 const questController = new QuestController();
 const userProgressController = new UserProgressController();
 
+// Campaigns Routes
+router.get("/tents", questController.fetchCampaigns);
+router.get("/tents/all", questController.fetchCampaignsViaAirLyft);
+
+// Quests Routes
+router.get("/quests", questController.fetchAllQuests);
 router.get("/quests/:eventId", questController.fetchQuests);
 
-// Campaigns and Quests
-router.get("/campaigns", questController.fetchCampaigns);
-router.get("/campaigns/all", questController.fetchCampaignsViaAirLyft);
-router.get("/quests", questController.fetchAllQuests);
-
-// Generate Connection Token
+// Connection Token Route
 router.get("/connection-token/:provider", questController.fetchConnectionToken);
 
-// User Info
+// Player Info Routes
 router.get("/me", questController.fetchMe);
 router.get(
   "/user-task-participation/:eventId",
   questController.fetchUserTaskParticipation
 );
+router.get(
+  "/stored-participation/:eventId",
+  questController.getUserStoredParticipation
+);
+router.get("/user-progress/:userId", userProgressController.getUserProgress);
 
-// Event Connections
+// Event Connections Routes
 router.get(
   "/event-connections/:eventId",
   questController.fetchEventConnections
 );
 router.post("/create-event-connection", questController.createEventConnection);
 
-// Participate in Task
+// Participate in Quest Routes
 router.post(
   "/participate/twitter-follow",
   questController.participateTwitterFollow
@@ -45,7 +51,7 @@ router.post(
   questController.participateEmailAddressTask
 );
 
-// Sync endpoints
+// Sync Tents and Quests Routes
 router.post("/sync/tents-and-quests", questController.syncTentsAndQuests);
 router.get("/tents-with-quests", questController.getAllTentsWithQuests);
 router.post(
@@ -65,17 +71,10 @@ router.get(
   questController.getAllQuestsWithPrerequisites
 );
 
-// Get stored participation data
-router.get(
-  "/stored-participation/:eventId",
-  questController.getUserStoredParticipation
-);
-
-// Email OTP endpoints
+// Email OTP Routes
 router.post("/send-otp", questController.sendEmailOTP);
 router.post("/verify-otp", questController.verifyEmailOTP);
 
-router.get("/user-progress/:userId", userProgressController.getUserProgress);
 router.post("/user-activity", userProgressController.updateUserActivity);
 router.post("/quest-completion", userProgressController.processQuestCompletion);
 router.post("/admin/safety-check", userProgressController.runDailySafetyCheck);

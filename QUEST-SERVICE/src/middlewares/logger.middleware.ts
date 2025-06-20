@@ -1,5 +1,5 @@
 import morgan from "morgan";
-import { httpLogger } from "@utils/http.logger";
+import { httpLogger } from "loggers/http.logger";
 import { Request } from "express";
 
 // Client's IP address

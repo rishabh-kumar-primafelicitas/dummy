@@ -2,16 +2,12 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import { morganMiddleware } from "middlewares/logger.middleware";
-import { errorHandler } from "middlewares/error.handler.middleware";
-import { indexRoutes } from "@routes/index.routes";
-import { NotFoundError } from "errors/index";
-import { setupAxiosInterceptors } from "@config/axios.config";
+import { morganMiddleware } from "./middlewares/logger.middleware";
+import { errorHandler } from "./middlewares/error.handler.middleware";
+import { indexRoutes } from "./routes/index.routes";
+import { NotFoundError } from "./errors/index";
 
 export const createApp = (): Application => {
-  // Set up axios interceptors
-  setupAxiosInterceptors();
-
   const app = express();
 
   // Security middleware

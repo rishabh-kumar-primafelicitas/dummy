@@ -1,6 +1,6 @@
 import { CronJob } from "cron";
 import { UserProgressService } from "@services/user.progress.service";
-import { logger } from "@utils/logger";
+import { logger } from "loggers/logger";
 
 export class SchedulerUtil {
   private userProgressService: UserProgressService;

@@ -1,7 +1,7 @@
 import axios from "axios";
 import { config } from "configs/server.config";
-import { logger } from "@utils/logger.util";
-import { InternalServerError } from "@utils/errors";
+import { logger } from "loggers/logger";
+import { InternalServerError } from "errors";
 import fs from "fs/promises";
 import path from "path";
 

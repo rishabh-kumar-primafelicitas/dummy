@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { config } from "configs/server.config";
 import { Types } from "mongoose";
-import { UnauthorizedError } from "@utils/errors/index";
+import { UnauthorizedError } from "errors/index";
 
 export interface JWTPayload {
   userId: string;

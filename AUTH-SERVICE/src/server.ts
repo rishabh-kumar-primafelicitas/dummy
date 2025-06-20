@@ -1,7 +1,7 @@
 import { createApp } from './app';
 import { connectDatabase } from 'configs/database.config';
 import { config } from 'configs/server.config';
-import { logger } from '@utils/logger.util';
+import { logger } from 'loggers/logger';
 import mongoose from 'mongoose';
 
 const startServer = async () => {

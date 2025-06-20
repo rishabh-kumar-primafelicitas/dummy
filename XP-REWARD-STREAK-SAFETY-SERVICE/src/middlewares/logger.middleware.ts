@@ -1,5 +1,5 @@
 import morgan from "morgan";
-import { httpLogger } from "loggers/http.logger";
+import { httpLogger } from "../loggers/http.logger";
 import { Request } from "express";
 
 // Client's IP address
@@ -15,7 +15,7 @@ const stream = {
 };
 
 const skip = () => {
-  return false; 
+  return false;
 };
 
 export const morganMiddleware = morgan(

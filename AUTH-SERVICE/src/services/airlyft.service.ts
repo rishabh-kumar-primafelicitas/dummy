@@ -1,6 +1,6 @@
 import axios from "axios";
 import { config } from "configs/server.config";
-import { InternalServerError } from "@utils/errors/index.js";
+import { InternalServerError } from "errors/index.js";
 
 interface AirLyftLoginResponse {
   data: {

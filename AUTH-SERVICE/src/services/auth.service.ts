@@ -14,14 +14,14 @@ import {
   InternalServerError,
   NotFoundError,
   UnauthorizedError,
-} from "@utils/errors/index.js";
+} from "errors/index.js";
 import { AirLyftService } from "./airlyft.service";
-import { logger } from "@utils/logger.util";
+import { logger } from "loggers/logger";
 import { BrevoService } from "./brevo.service";
 import { PasswordUtil } from "@utils/password.util";
 import axios from "axios";
 import { User } from "@models/user.model";
-import { ValidationError } from "@utils/errors/validation.error";
+import { ValidationError } from "errors/validation.error";
 export interface SignupData {
   username: string;
   // email: string;

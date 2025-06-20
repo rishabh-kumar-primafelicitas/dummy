@@ -4,8 +4,8 @@ import helmet from "helmet";
 import compression from "compression";
 import { morganMiddleware } from "middlewares/logger.middleware";
 import { errorHandler } from "middlewares/error.handler.middleware";
-import { indexRoutes } from "@routes/index.route";
-import { NotFoundError } from "@utils/errors/index";
+import { indexRoutes } from "@routes/index.routes";
+import { NotFoundError } from "errors/index";
 
 export const createApp = (): Application => {
   const app = express();

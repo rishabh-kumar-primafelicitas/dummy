@@ -3,7 +3,7 @@ import { UserProgressRepository } from "@repositories/user.progress.repository";
 import { QuestRepository } from "@repositories/quest.repository";
 import { IUserProgress, ActivityType } from "@models/interfaces/IUserProgress";
 import { ILevelRewards, RewardType } from "@models/interfaces/ILevelRewards";
-import { logger } from "@utils/logger";
+import { logger } from "loggers/logger";
 
 export interface UserProgressResponse {
   xpMeter: {

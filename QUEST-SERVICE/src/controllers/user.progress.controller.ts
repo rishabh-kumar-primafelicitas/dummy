@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { UserProgressService } from "@services/user.progress.service";
-import { ValidationError } from "@utils/errors/validation.error";
+import { ValidationError } from "errors/validation.error";
 import { ActivityType } from "@models/interfaces/IUserProgress";
 import { asyncHandler } from "@utils/async.handler.util";
 

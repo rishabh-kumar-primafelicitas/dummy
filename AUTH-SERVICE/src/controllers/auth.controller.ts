@@ -2,7 +2,7 @@ import { AuthService } from "@services/auth.service";
 import { AuthenticatedRequest } from "middlewares/auth.middleware";
 import { Request, Response, NextFunction } from "express";
 import { asyncHandler } from "@utils/async.handler.util";
-import { ValidationError } from "@utils/errors/validation.error";
+import { ValidationError } from "errors/validation.error";
 
 const authService = new AuthService();
 

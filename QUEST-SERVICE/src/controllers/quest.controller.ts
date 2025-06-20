@@ -15,12 +15,12 @@ import { executeGraphQLQuery } from "@services/graphql.service";
 import { config } from "@config/server.config";
 import axios from "axios";
 import { QuestService } from "@services/quest.service";
-import { ValidationError } from "@utils/errors/validation.error";
+import { ValidationError } from "errors/validation.error";
 import {
   ConfigurationError,
   NotFoundError,
   UnauthorizedError,
-} from "@utils/errors";
+} from "errors";
 import { asyncHandler } from "@utils/async.handler.util";
 import { Types } from "mongoose";
 

@@ -5,9 +5,9 @@ import {
   NotFoundError,
   BadRequestError,
   InternalServerError,
-} from "@utils/errors";
-import { AppError } from "@utils/errors/app.error";
-import { logger } from "@utils/logger";
+} from "errors";
+import { AppError } from "errors/app.error";
+import { logger } from "loggers/logger";
 
 /**
  * Configure global axios interceptors to handle errors consistently

@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { UserProgress } from "@models/user.progress.model";
 import { LevelRewards } from "@models/level.rewards.model";
-import { IUserProgress, SafetyStage } from "@models/interfaces/IUserProgress";
+import { IUserProgress } from "@models/interfaces/IUserProgress";
 import { ILevelRewards } from "@models/interfaces/ILevelRewards";
 
 export interface CreateUserProgressData {

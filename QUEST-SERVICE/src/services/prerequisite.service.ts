@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import { QuestRepository } from "../repositories/quest.repository";
-import { InternalServerError } from "@utils/errors";
+import { InternalServerError } from "errors";
 
 interface GuardRule {
   ruleType: string;

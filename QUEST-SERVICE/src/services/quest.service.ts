@@ -14,8 +14,8 @@ import {
   UnauthorizedError,
   InternalServerError,
   NotFoundError,
-} from "@utils/errors";
-import { ValidationError } from "@utils/errors/validation.error";
+} from "errors";
+import { ValidationError } from "errors/validation.error";
 import { PrerequisiteService } from "./prerequisite.service";
 import { UserProgressService } from "./user.progress.service";
 
