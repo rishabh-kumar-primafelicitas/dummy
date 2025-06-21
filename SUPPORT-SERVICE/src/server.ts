@@ -3,12 +3,13 @@ import { createApp } from './app';
 import { connectDatabase } from '@config/db.config';
 import { logger } from '@utils/logger';
 import mongoose from 'mongoose';
+import { connectMongoClient } from '@config/mongoClient';
 
 const startServer = async () => {
   try {
     // Connect to database
     await connectDatabase();
-
+    await connectMongoClient(); 
     // Create Express app
     const app = createApp();
 

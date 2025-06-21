@@ -12,6 +12,7 @@ import {
   getUserTickets
 } from '@controllers/support.controller';
 import {getSupportManagerStats} from '@controllers/supportManagerStats.controller'
+import { searchTicketsHandler } from "@controllers/ticketSearch.controller";
 const router = Router();
 
 // Ticket routes
@@ -29,5 +30,6 @@ router.post('/respondToTicket', respondToTicket);
 router.get('/supportManagers', getSupportManagers);
 router.get('/stats/manager', getSupportManagerStats);
 
-
+// serach routes
+router.get('/tickets/search', searchTicketsHandler);
 export default router;

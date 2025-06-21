@@ -13,13 +13,13 @@ import { createSupportTicket } from '../repository/supportTicket.repository';
 import { uploadFile } from '../middleware/upload';
 import { generateUniqueTicketId } from '@utils/generateTicketId';
 import SupportManagerStats from '@models/SupportManagerStats.model';
-import { fetchLoggedInUser } from '../services/authService';
+import { fetchLoggedInUser } from '../services/auth.service';
 import axios from 'axios';
 import { config } from '@config/server.config';
 import SupportTicketModel from '../models/supportTicket.model';
-import { fetchTickets } from '../services/ticketService';
-import { fetchSupportManagers } from '@services/authService';
-import { fetchManagerStats } from '@services/statsService';
+import { fetchTickets } from '../services/ticket.service';
+import { fetchSupportManagers } from '@services/auth.service';
+import { fetchManagerStats } from '@services/stats.service';
 import {
   createTicket,
   getTickets,

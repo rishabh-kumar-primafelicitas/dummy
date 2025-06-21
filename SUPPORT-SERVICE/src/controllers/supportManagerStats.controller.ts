@@ -41,7 +41,7 @@
 // };
 
 import { Request, Response } from 'express';
-import { fetchManagerStats } from '../services/statsService';
+import { fetchManagerStats } from '../services/stats.service';
 
 // This controller handles fetching support manager statistics
 export const getSupportManagerStats = async (req: Request, res: Response): Promise<void> => {

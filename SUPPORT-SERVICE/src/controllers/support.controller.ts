@@ -12,6 +12,29 @@ import {
   fetchTickets
 } from '../utils/imports.util';
 
+const AUTH_SERVICE_BASE_URL = process.env.AUTH_SERVICE_URL; // replace with actual service URL
+
+const getUsernameById = async (id: string): Promise<string | null> => {
+  try {
+    const response = await axios.get(`${AUTH_SERVICE_BASE_URL}/api/v1/public/me`, {
+      headers: { userid: id },
+    });
+
+    // console.log(`Username fetch response for ${id}:`, response.data); // optional debug log
+
+    if (response.data?.status && response.data?.data?.user) {
+      return response.data.data.user.username;
+    }
+    return null;
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error(`Failed to fetch username for ID ${id}:`, err.message);
+    } else {
+      console.error(`Failed to fetch username for ID ${id}:`, err);
+    }
+    return null;
+  }
+};
 
 // // Submit ticket via a basic form (no file upload logic here)
 // export const submitTicketForm = async (req: Request, res: Response): Promise<void> => {
@@ -278,14 +301,14 @@ export const getTickets = async (req: Request, res: Response): Promise<void> => 
   const statusParam = req.query.status as string;
   const status = mongoose.isValidObjectId(statusParam) ? statusParam : undefined;
 
-  // 👇 Extract startDate and endDate from query
+  // Extract startDate and endDate from query
   const startDateStr = req.query.startDate as string;
   const endDateStr = req.query.endDate as string;
   const startDate = startDateStr ? new Date(startDateStr) : undefined;
   const endDate = endDateStr ? new Date(endDateStr) : undefined;
 
   try {
-    // 👇 Pass them to fetchTickets
+  // Pass to fetchTickets
     const result = await fetchTickets({ page, limit, skip, search, status, startDate, endDate });
 
     res.status(200).json({
@@ -383,6 +406,34 @@ export const getTicketsAssignedToManager = async (req: Request, res: Response): 
 };
 
 // Get single ticket by ID
+// export const getTicketById = async (req: Request, res: Response): Promise<void> => {
+//   const ticketId = req.params.id;
+
+//   if (!mongoose.Types.ObjectId.isValid(ticketId)) {
+//     res.status(400).json({ status: false, message: 'Invalid ticket ID format' });
+//     return;
+//   }
+
+//   try {
+//     const ticket = await SupportTicket.findById(ticketId)
+//       .populate('status', 'name')
+//       .populate('priority', 'name')
+//       .populate('category', 'name');
+
+//     if (!ticket) {
+//       res.status(404).json({ status: false, message: 'Ticket not found' });
+//       return;
+//     }
+
+//     res
+//       .status(200)
+//       .json({ status: true, message: 'Ticket fetched successfully', data: { ticket } });
+//   } catch (err) {
+//     res.status(500).json({ status: false, message: 'Failed to fetch ticket' });
+//   }
+// };
+
+
 export const getTicketById = async (req: Request, res: Response): Promise<void> => {
   const ticketId = req.params.id;
 
@@ -402,14 +453,39 @@ export const getTicketById = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    res
-      .status(200)
-      .json({ status: true, message: 'Ticket fetched successfully', data: { ticket } });
+    // Fetch usernames for createdBy and assignedTo
+    const [createdByUsername, assignedToUsername] = await Promise.all([
+      getUsernameById(ticket.createdBy?.toString() || ''),
+      getUsernameById(ticket.assignedTo?.toString() || ''),
+    ]);
+    const rawTicket = ticket.toObject();
+    const ticketWithUsernames = {
+      ...rawTicket,
+      createdBy: {
+        _id: rawTicket.createdBy?._id || rawTicket.createdBy,
+        username: createdByUsername || 'Unknown',
+      },
+      assignedTo: {
+        _id: rawTicket.assignedTo?._id || rawTicket.assignedTo,
+        username: assignedToUsername || 'Unknown',
+      },
+    };
+
+
+    res.status(200).json({
+      status: true,
+      message: 'Ticket fetched successfully',
+      data: { ticket: ticketWithUsernames },
+    });
   } catch (err) {
+    if (err instanceof Error) {
+      console.error('Error fetching ticket:', err.message);
+    } else {
+      console.error('Error fetching ticket:', err);
+    }
     res.status(500).json({ status: false, message: 'Failed to fetch ticket' });
   }
 };
-
 // Update ticket details
 export const updateTicket = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -531,6 +607,63 @@ export const deleteTicket = async (req: Request, res: Response): Promise<void> =
 //     res.status(500).json({ status: false, message: 'Failed to fetch assigned tickets' });
 //   }
 // };
+// export const getTicketsByAssignedManager = async (req: Request, res: Response): Promise<void> => {
+//   const managerId = req.params.managerId;
+
+//   if (!mongoose.Types.ObjectId.isValid(managerId)) {
+//     res.status(400).json({ status: false, message: 'Invalid manager ID' });
+//     return;
+//   }
+
+//   const page = parseInt(req.query.page as string, 10) || 1;
+//   const limit = parseInt(req.query.limit as string, 10) || 10;
+//   const skip = (page - 1) * limit;
+
+//   const status = req.query.status && mongoose.isValidObjectId(req.query.status as string)
+//     ? req.query.status as string
+//     : undefined;
+
+//   const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+//   const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+//   if (endDate) endDate.setHours(23, 59, 59, 999);
+
+//   const query: any = { assignedTo: managerId };
+//   if (status) query.status = status;
+//   if (startDate && endDate) {
+//     query.createdAt = { $gte: startDate, $lte: endDate };
+//   }
+
+//   try {
+//     const [tickets, total] = await Promise.all([
+//       SupportTicket.find(query)
+//         .populate('status', 'name')
+//         .populate('priority', 'name')
+//         .populate('category', 'name')
+//         .sort({ createdAt: -1 })
+//         .skip(skip)
+//         .limit(limit)
+//         .lean(),
+//       SupportTicket.countDocuments(query),
+//     ]);
+
+//     const totalPages = Math.ceil(total / limit);
+
+//     res.status(200).json({
+//       status: true,
+//       message: 'Tickets assigned to the support manager fetched successfully',
+//       data: tickets,
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         pages: totalPages,
+//       },
+//     });
+//   } catch (err) {
+//     console.error('Error fetching assigned tickets:', err);
+//     res.status(500).json({ status: false, message: 'Failed to fetch assigned tickets' });
+//   }
+// };
 export const getTicketsByAssignedManager = async (req: Request, res: Response): Promise<void> => {
   const managerId = req.params.managerId;
 
@@ -566,16 +699,43 @@ export const getTicketsByAssignedManager = async (req: Request, res: Response): 
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .lean(),
+        .lean(), 
       SupportTicket.countDocuments(query),
     ]);
+
+    // Extract user IDs (createdBy & assignedTo)
+    const userIds = new Set<string>();
+    tickets.forEach(ticket => {
+      if (ticket.createdBy) userIds.add(ticket.createdBy.toString());
+      if (ticket.assignedTo) userIds.add(ticket.assignedTo.toString());
+    });
+
+    // Map userId → username
+    const userMap = new Map<string, string>();
+    await Promise.all(Array.from(userIds).map(async userId => {
+      const username = await getUsernameById(userId);
+      userMap.set(userId, username || 'Unknown');
+    }));
+
+    // Inject usernames into the tickets
+    const enrichedTickets = tickets.map(ticket => ({
+      ...ticket,
+      createdBy: {
+        _id: ticket.createdBy,
+        username: userMap.get(ticket.createdBy?.toString() || '') || 'Unknown',
+      },
+      assignedTo: {
+        _id: ticket.assignedTo,
+        username: userMap.get(ticket.assignedTo?.toString() || '') || 'Unknown',
+      },
+    }));
 
     const totalPages = Math.ceil(total / limit);
 
     res.status(200).json({
       status: true,
       message: 'Tickets assigned to the support manager fetched successfully',
-      data: tickets,
+      data: enrichedTickets,
       pagination: {
         total,
         page,

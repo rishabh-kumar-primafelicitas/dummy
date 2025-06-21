@@ -1,4 +1,4 @@
-import { SupportTicket } from '../utils/imports.util';
+import { axios, SupportTicket } from '../utils/imports.util';
 // import mongoose from 'mongoose';
 
 // interface FetchTicketsOptions {
@@ -82,6 +82,50 @@ import { SupportTicket } from '../utils/imports.util';
 //   };
 // };
 
+const getUsernameById = async (id: string): Promise<string | null> => {
+  try {
+    const response = await axios.get(`${process.env.AUTH_SERVICE_URL}/api/v1/public/me`, {
+      headers: { userid: id },
+    });
+
+    if (response.data?.status && response.data?.data?.user?.username) {
+      return response.data.data.user.username;
+    }
+    return null;
+  } catch (err) {
+    console.error(`❌ Failed to fetch username for ID ${id}:`, err);
+    return null;
+  }
+};
+const enrichUsernames = async (tickets: any[]): Promise<any[]> => {
+  const userIds = new Set<string>();
+
+  tickets.forEach(ticket => {
+    if (ticket.createdBy) userIds.add(ticket.createdBy.toString());
+    if (ticket.assignedTo) userIds.add(ticket.assignedTo.toString());
+  });
+
+  const userMap = new Map<string, string>();
+  await Promise.all(
+    Array.from(userIds).map(async userId => {
+      const username = await getUsernameById(userId);
+      userMap.set(userId, username || 'Unknown');
+    })
+  );
+
+  return tickets.map(ticket => ({
+    ...ticket,
+    createdBy: {
+      _id: ticket.createdBy,
+      username: userMap.get(ticket.createdBy?.toString() || '') || 'Unknown',
+    },
+    assignedTo: {
+      _id: ticket.assignedTo,
+      username: userMap.get(ticket.assignedTo?.toString() || '') || 'Unknown',
+    },
+  }));
+};
+
 interface FetchTicketsOptions {
   page?: number;
   limit?: number;
@@ -111,7 +155,7 @@ export const fetchTickets = async (
       .sort({ createdAt: -1 })
       .lean();
 
-    return { data: tickets };
+    return { data: await enrichUsernames(tickets) }; // username enrichment
   }
 
   const { page = 1, limit = 10, skip = 0, search = '', status, startDate, endDate } = options;
@@ -139,9 +183,6 @@ export const fetchTickets = async (
     }
   }
 
-  console.log('🧾 Final query used for ticket fetch:', JSON.stringify(query));
-  console.log(`📤 Pagination params => page: ${page}, limit: ${limit}, skip: ${skip}`);
-
   const [tickets, total] = await Promise.all([
     SupportTicket.find(query)
       .populate('category', 'name')
@@ -151,17 +192,15 @@ export const fetchTickets = async (
       .skip(skip)
       .limit(limit)
       .lean(),
-
     SupportTicket.countDocuments(query),
   ]);
 
-  console.log(`✅ Tickets fetched: ${tickets.length}`);
-  console.log(`📈 Total matching tickets: ${total}`);
+  const enrichedTickets = await enrichUsernames(tickets); // 💡 Add usernames
+
   const totalPages = Math.ceil(total / limit);
-  console.log(`📄 Total pages: ${totalPages}`);
 
   return {
-    data: tickets,
+    data: enrichedTickets,
     pagination: {
       total,
       page,
