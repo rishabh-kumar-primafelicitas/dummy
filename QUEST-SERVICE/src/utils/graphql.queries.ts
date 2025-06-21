@@ -591,6 +591,8 @@ query Tasks($eventId: ID!) {
     appKey
     taskKey
     verify
+    createdAt
+    updatedAt
     subTaskStats {
       count
       totalPoints
@@ -975,5 +977,3 @@ query TasksByParentId($parentId: ID!) {
     __typename
   }
 }`;
-
-

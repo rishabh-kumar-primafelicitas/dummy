@@ -397,6 +397,62 @@ export class QuestService {
     }
   }
 
+  /**
+   * Determines if a quest should be stored for cross-campaign prerequisite rules
+   * based on enhanced conditions including parentId and __typename validation
+   */
+  private shouldStoreQuestForCrossCampaignRules(
+    task: any,
+    tentTypeName: string
+  ): boolean {
+    // First condition: parentId should be null for all Social and Educational tasks
+    if (task.parentId !== null && task.parentId !== undefined) {
+      return false;
+    }
+
+    // Get the __typename from task.info
+    const infoTypeName = task.info?.__typename;
+
+    if (!infoTypeName) {
+      return false;
+    }
+
+    // Enhanced conditions based on tent type and quest order
+    if (tentTypeName === "Social") {
+      switch (task.order) {
+        case 1:
+          // Social_Quest_1 - should have info.__typename = TwitterFollowTaskData
+          return infoTypeName === "TwitterFollowTaskData";
+        case 2:
+          // Social_Quest_2 - should have info.__typename = DiscordJoinTaskData
+          return infoTypeName === "DiscordJoinTaskData";
+        case 3:
+          // Social_Quest_3 - should have info.__typename = NullableTaskData
+          return infoTypeName === "NullableTaskData";
+        default:
+          return false;
+      }
+    } else if (tentTypeName === "Educational") {
+      switch (task.order) {
+        case 1:
+          // Educational_Quest_1 - should have info.__typename = LinkTaskData
+          return infoTypeName === "LinkTaskData";
+        case 2:
+          // Educational_Quest_2 - should have info.__typename = QuizTaskData
+          // and info.questionType should not be a key in the quest
+          if (infoTypeName === "QuizTaskData") {
+            // Check that questionType is not a key in the quest (parent quiz, not individual question)
+            return !task.info.questionType;
+          }
+          return false;
+        default:
+          return false;
+      }
+    }
+
+    return false;
+  }
+
   async syncTentsAndQuests() {
     const projectId = config.airLyft.projectId;
 
@@ -590,8 +646,15 @@ export class QuestService {
               const tentTypeName = tentTypeId.equals(socialTentType._id)
                 ? "Social"
                 : "Educational";
-              const questKey = `${tentTypeName}_Quest_${task.order || 1}`;
-              questsByTentAndOrder.set(questKey, existingQuest._id);
+
+              // Enhanced logic for Social and Educational quest classification
+              const shouldStoreQuest =
+                this.shouldStoreQuestForCrossCampaignRules(task, tentTypeName);
+
+              if (shouldStoreQuest) {
+                const questKey = `${tentTypeName}_Quest_${task.order || 1}`;
+                questsByTentAndOrder.set(questKey, existingQuest._id);
+              }
 
               questIds.push(existingQuest._id);
             } catch (questError: any) {
