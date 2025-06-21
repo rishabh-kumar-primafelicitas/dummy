@@ -7,12 +7,49 @@ import {
   FETCH_QUESTS_QUERY,
   PARTICIPATE_EMAIL_ADDRESS_TASK_MUTATION,
   USER_TASK_PARTICIPATION_QUERY,
+  TASKS_BY_PARENT_ID_QUERY,
+  PARTICIPATE_QUIZ_PLAY_TASK_MUTATION,
 } from "@utils/graphql.queries";
 import { config } from "@config/server.config";
 import axios from "axios";
 import { UnauthorizedError, InternalServerError, NotFoundError } from "errors";
 import { ValidationError } from "errors/validation.error";
 import { PrerequisiteService } from "./prerequisite.service";
+
+interface QuizQuestion {
+  id: string;
+  order: number;
+  title: string;
+  description: string | null;
+  questionType: string;
+  options: Array<{
+    id: string;
+    text: string;
+  }>;
+  points: number;
+  xp: number;
+  isAnswered: boolean;
+  userAnswer?: string[];
+  correctAnswer?: string[];
+  isCorrect?: boolean;
+  earnedPoints?: number;
+  earnedXP?: number;
+}
+
+interface QuizDetails {
+  id: string;
+  title: string;
+  description: string | null;
+  totalQuestions: number;
+  completedQuestions: number;
+  correctAnswers: number;
+  progress: number;
+  isCompleted: boolean;
+  totalPoints: number;
+  earnedPoints: number;
+  totalXP: number;
+  earnedXP: number;
+}
 
 interface UserResponse {
   status: boolean;
@@ -814,7 +851,13 @@ export class QuestService {
     const dbQuests = await this.questRepository.getQuestsByTentId(
       tent._id.toString()
     );
-    const sortedQuests = dbQuests.sort(
+
+    // Filter out quiz questions (only show parent quizzes)
+    const parentQuests = dbQuests.filter(
+      (quest) => quest.parentId === null || quest.parentId === undefined
+    );
+
+    const sortedQuests = parentQuests.sort(
       (a: any, b: any) => (a.order || 0) - (b.order || 0)
     );
 
@@ -826,25 +869,44 @@ export class QuestService {
     const questTaskIdMap =
       await this.questRepository.createQuestIdToTaskIdMap();
 
-    const questsWithStatus = sortedQuests.map((quest: any) => {
-      const isCompleted = this.isQuestCompletedByUser(
-        quest.taskId,
-        allCompletedTasksByTent
-      );
-      const isLocked = this.prerequisiteService.isQuestLocked(
-        quest,
-        allCompletedTasksByTent,
-        questTaskIdMap
-      );
+    const questsWithStatus = await Promise.all(
+      sortedQuests.map(async (quest: any) => {
+        let isCompleted = false;
 
-      return {
-        ...quest.toObject(),
-        isCompleted,
-        isLocked,
-      };
-    });
+        // For quiz tasks, check if all questions are completed
+        if (this.isQuizParent(quest)) {
+          const progress = await this.questRepository.getQuizProgressByUserId(
+            userInfo.userId,
+            quest.taskId
+          );
+          isCompleted = progress.isCompleted;
+        } else {
+          // For regular tasks, use existing logic
+          isCompleted = this.isQuestCompletedByUser(
+            quest.taskId,
+            allCompletedTasksByTent
+          );
+        }
 
-    return { quests: questsWithStatus, message: "Quests fetched successfully" };
+        const isLocked = this.prerequisiteService.isQuestLocked(
+          quest,
+          allCompletedTasksByTent,
+          questTaskIdMap
+        );
+
+        return {
+          ...quest.toObject(),
+          isCompleted,
+          isLocked,
+          questType: this.isQuizParent(quest) ? "QUIZ" : "REGULAR",
+        };
+      })
+    );
+
+    return {
+      quests: questsWithStatus,
+      message: "Quests fetched successfully",
+    };
   }
 
   async setCustomPrerequisites(
@@ -1151,5 +1213,298 @@ export class QuestService {
       );
       return 0;
     }
+  }
+
+  async fetchQuizDetails(
+    quizTaskId: string,
+    authToken: string
+  ): Promise<{
+    quiz: QuizDetails;
+    questions: QuizQuestion[];
+    message: string;
+  }> {
+    // Get user info
+    const userInfo = await this.getUserInfo(authToken);
+
+    // Find quiz in database
+    const quiz = await this.questRepository.findQuizByTaskId(quizTaskId);
+    if (!quiz) {
+      throw new NotFoundError("Quiz not found");
+    }
+
+    // Get quiz questions from AirLyft
+    const questionsResponse = await executeGraphQLQuery(
+      TASKS_BY_PARENT_ID_QUERY,
+      { parentId: quizTaskId },
+      false
+    );
+
+    if (questionsResponse?.errors) {
+      throw new InternalServerError(
+        `Failed to fetch quiz questions: ${JSON.stringify(
+          questionsResponse.errors
+        )}`
+      );
+    }
+
+    const airLyftQuestions = questionsResponse?.data?.pTasksByParentId || [];
+
+    // Get user's participation status
+    const participation = await this.questRepository.getQuizParticipationStatus(
+      userInfo.userId,
+      quizTaskId
+    );
+
+    // Get quiz progress
+    const progress = await this.questRepository.getQuizProgressByUserId(
+      userInfo.userId,
+      quizTaskId
+    );
+
+    // Format questions with user progress - Fixed typing
+    const questionsWithProgress: QuizQuestion[] = airLyftQuestions.map(
+      (question: any) => {
+        const userParticipation = participation?.participations.find(
+          (p: any) => p.taskId === question.id
+        );
+
+        // Create base question object with proper typing
+        const formattedQuestion: QuizQuestion = {
+          id: question.id,
+          order: question.order,
+          title: question.title,
+          description: question.description,
+          questionType: question.info?.questionType,
+          options:
+            question.info?.options?.map((option: any) => ({
+              id: option.id,
+              text: option.text,
+              // Deliberately exclude isCorrect to hide answers
+            })) || [],
+          points: question.points || 0,
+          xp: question.xp || 0,
+          isAnswered: !!userParticipation,
+        };
+
+        // Add answer details only if question was answered
+        if (userParticipation) {
+          formattedQuestion.userAnswer = userParticipation.answers || [];
+          formattedQuestion.correctAnswer =
+            userParticipation.correctAnswers || [];
+          formattedQuestion.isCorrect = userParticipation.status === "VALID";
+          formattedQuestion.earnedPoints = userParticipation.points || 0;
+          formattedQuestion.earnedXP = userParticipation.xp || 0;
+        }
+
+        return formattedQuestion;
+      }
+    );
+
+    // Format quiz details with proper typing
+    const quizDetails: QuizDetails = {
+      id: quiz.taskId,
+      title: quiz.title,
+      description: quiz.description,
+      totalQuestions: progress.totalQuestions,
+      completedQuestions: progress.answeredQuestions,
+      correctAnswers: progress.correctAnswers,
+      progress: Math.round(progress.progress),
+      isCompleted: progress.isCompleted,
+      totalPoints: progress.totalPoints,
+      earnedPoints: progress.earnedPoints,
+      totalXP: progress.totalXP,
+      earnedXP: progress.earnedXP,
+    };
+
+    return {
+      quiz: quizDetails,
+      questions: questionsWithProgress,
+      message: "Quiz details fetched successfully",
+    };
+  }
+
+  async submitQuestionAnswer(
+    quizTaskId: string,
+    questionTaskId: string,
+    answers: string[],
+    eventId: string,
+    authToken: string,
+    clientIp?: string
+  ): Promise<{
+    questionId: string;
+    userAnswers: string[];
+    correctAnswers: string[];
+    isCorrect: boolean;
+    pointsEarned: number;
+    xpEarned: number;
+    progress: {
+      completedQuestions: number;
+      totalQuestions: number;
+      percentage: number;
+      isQuizCompleted: boolean;
+    };
+    airLyftResponse: any;
+    xpResult?: any;
+    message: string;
+  }> {
+    // Get user info
+    const userInfo = await this.getUserInfo(authToken);
+
+    // Validate quiz exists
+    const quiz = await this.questRepository.findQuizByTaskId(quizTaskId);
+    if (!quiz) {
+      throw new NotFoundError("Quiz not found");
+    }
+
+    // Validate question exists and belongs to quiz
+    const question = await this.questRepository.findQuestionByTaskId(
+      questionTaskId
+    );
+    if (!question || question.parentId !== quizTaskId) {
+      throw new ValidationError(
+        { questionId: "Question not found or doesn't belong to this quiz" },
+        "Invalid question"
+      );
+    }
+
+    // Check if question already answered
+    const existingParticipation =
+      await this.questRepository.getQuizParticipationStatus(
+        userInfo.userId,
+        quizTaskId
+      );
+
+    const alreadyAnswered = existingParticipation?.participations.some(
+      (p: any) => p.taskId === questionTaskId
+    );
+
+    if (alreadyAnswered) {
+      throw new ValidationError(
+        { questionId: "Question already answered" },
+        "Question already answered"
+      );
+    }
+
+    // Submit answer to AirLyft
+    const airLyftResponse = await executeGraphQLQuery(
+      PARTICIPATE_QUIZ_PLAY_TASK_MUTATION,
+      {
+        eventId,
+        taskId: questionTaskId,
+        data: { answers },
+      },
+      true,
+      true,
+      userInfo.airLyftAuthToken,
+      clientIp
+    );
+
+    if (airLyftResponse?.errors) {
+      throw new InternalServerError(
+        `Failed to submit answer to AirLyft: ${JSON.stringify(
+          airLyftResponse.errors
+        )}`
+      );
+    }
+
+    const participationResult = airLyftResponse?.data?.participateQuizPlayTask;
+    if (!participationResult) {
+      throw new InternalServerError("No participation result from AirLyft");
+    }
+
+    const correctAnswers = participationResult.correctAnswers || [];
+    const pointsEarned = participationResult.points || 0;
+    const xpEarned = participationResult.xp || 0;
+    const isCorrect = pointsEarned > 0;
+    const airLyftParticipationId =
+      participationResult.insertResult?.identifiers?.[0]?.id || "";
+
+    // Store participation in local database
+    await this.questRepository.updateQuestionParticipation(
+      userInfo.userId,
+      eventId,
+      {
+        taskId: questionTaskId,
+        questId: question._id,
+        quizParentId: quizTaskId,
+        answers,
+        correctAnswers,
+        isCorrect,
+        points: pointsEarned,
+        xp: xpEarned,
+        status: isCorrect ? "VALID" : "INVALID",
+        airLyftParticipationId,
+        participatedAt: new Date(),
+      }
+    );
+
+    // Process XP if question answered correctly
+    let xpResult = null;
+    if (isCorrect && xpEarned > 0) {
+      try {
+        const tent = await this.getTentByEventId(eventId);
+        xpResult = await this.processQuestXP(
+          { data: { data: { user: { id: userInfo.userId } } } },
+          eventId,
+          questionTaskId
+        );
+      } catch (xpError: any) {
+        console.error("Error processing XP for question:", xpError);
+        // Continue even if XP processing fails
+      }
+    }
+
+    // Get updated progress
+    const updatedProgress = await this.questRepository.getQuizProgressByUserId(
+      userInfo.userId,
+      quizTaskId
+    );
+
+    // Check if quiz is now complete and process bonus XP
+    if (updatedProgress.isCompleted && !existingParticipation) {
+      try {
+        // Process quiz completion XP
+        await this.processQuestXP(
+          { data: { data: { user: { id: userInfo.userId } } } },
+          eventId,
+          quizTaskId
+        );
+      } catch (xpError: any) {
+        console.error("Error processing quiz completion XP:", xpError);
+      }
+    }
+
+    return {
+      questionId: questionTaskId,
+      userAnswers: answers,
+      correctAnswers,
+      isCorrect,
+      pointsEarned,
+      xpEarned,
+      progress: {
+        completedQuestions: updatedProgress.answeredQuestions,
+        totalQuestions: updatedProgress.totalQuestions,
+        percentage: Math.round(updatedProgress.progress),
+        isQuizCompleted: updatedProgress.isCompleted,
+      },
+      airLyftResponse: participationResult,
+      xpResult,
+      message: isCorrect
+        ? "Correct answer!"
+        : "Incorrect answer. Try again next time!",
+    };
+  }
+
+  // Helper method to check if a quest is a quiz parent
+  isQuizParent(quest: any): boolean {
+    return (
+      quest.taskType === "QUIZ_PLAY" &&
+      (quest.parentId === null || quest.parentId === undefined)
+    );
+  }
+
+  // Helper method to check if a quest is a quiz question
+  isQuizQuestion(quest: any): boolean {
+    return quest.taskType === "QUIZ_PLAY" && quest.parentId !== null;
   }
 }

@@ -721,7 +721,11 @@ export class QuestController {
       }
 
       // Process XP
-      const xpResult = await this.questService.processQuestXP(userResponse, eventId, taskId);
+      const xpResult = await this.questService.processQuestXP(
+        userResponse,
+        eventId,
+        taskId
+      );
 
       res.status(200).json({
         status: true,
@@ -1322,7 +1326,11 @@ export class QuestController {
       }
 
       // Process XP
-      const xpResult = await this.questService.processQuestXP(userResponse, eventId, taskId);
+      const xpResult = await this.questService.processQuestXP(
+        userResponse,
+        eventId,
+        taskId
+      );
 
       res.status(200).json({
         status: true,
@@ -1418,7 +1426,11 @@ export class QuestController {
       }
 
       // Process XP
-      const xpResult = await this.questService.processQuestXP(userResponse, eventId, taskId);
+      const xpResult = await this.questService.processQuestXP(
+        userResponse,
+        eventId,
+        taskId
+      );
 
       res.status(200).json({
         status: true,
@@ -1787,4 +1799,150 @@ export class QuestController {
       });
     }
   );
+
+  submitQuestionAnswer = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+      const quizId = req.params.quizId;
+      const questionId = req.params.questionId;
+
+      if (!quizId) {
+        throw new ValidationError(
+          { quizId: "Quiz ID is required" },
+          "Missing required fields"
+        );
+      }
+
+      if (!questionId) {
+        throw new ValidationError(
+          { questionId: "Question ID is required" },
+          "Missing required fields"
+        );
+      }
+
+      const authToken = req.headers.authorization;
+
+      if (!authToken) {
+        throw new UnauthorizedError("Authorization token is required");
+      }
+
+      if (!req.body) {
+        throw new ValidationError(
+          { body: "Request body is required" },
+          "Missing request fields"
+        );
+      }
+
+      const { answers, eventId } = req.body;
+
+      const errors: Record<string, string> = {};
+      if (!answers || !Array.isArray(answers) || answers.length === 0) {
+        errors.answers = "Answers array is required and cannot be empty";
+      }
+      if (!eventId) {
+        errors.eventId = "Event ID is required";
+      }
+
+      if (Object.keys(errors).length > 0) {
+        throw new ValidationError(errors, "Missing required fields");
+      }
+
+      const clientIp = this.getClientIp(req);
+
+      const result = await this.questService.submitQuestionAnswer(
+        quizId,
+        questionId,
+        answers,
+        eventId,
+        authToken,
+        clientIp
+      );
+
+      res.status(200).json({
+        status: true,
+        data: result,
+        message: result.message,
+      });
+    }
+  );
+
+  fetchQuizDetails = asyncHandler(
+    async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+      // Fix: Proper validation for quizId
+      const quizId = req.params.quizId;
+
+      if (!quizId) {
+        throw new ValidationError(
+          { quizId: "Quiz ID is required" },
+          "Missing required fields"
+        );
+      }
+
+      // Get authorization token from headers
+      const authToken = req.headers.authorization;
+
+      if (!authToken) {
+        throw new UnauthorizedError("Authorization token is required");
+      }
+
+      const result = await this.questService.fetchQuizDetails(
+        quizId,
+        authToken
+      );
+
+      res.status(200).json({
+        status: true,
+        data: {
+          quiz: result.quiz,
+          questions: result.questions,
+        },
+        message: result.message,
+      });
+    }
+  );
+
+  // Get quiz progress separately
+  // getQuizProgress = asyncHandler(
+  //   async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
+  //     // Fix: Proper validation for quizId
+  //     const quizId = req.params.quizId;
+
+  //     if (!quizId) {
+  //       throw new ValidationError(
+  //         { quizId: "Quiz ID is required" },
+  //         "Missing required fields"
+  //       );
+  //     }
+
+  //     const authToken = req.headers.authorization;
+
+  //     if (!authToken) {
+  //       throw new UnauthorizedError("Authorization token is required");
+  //     }
+
+  //     // Get user info
+  //     const userResponse = await axios.get(
+  //       `${config.services.authServiceUrl}/api/v1/me`,
+  //       {
+  //         headers: { Authorization: authToken },
+  //       }
+  //     );
+
+  //     if (!userResponse.data?.status || !userResponse.data.data?.user?.id) {
+  //       throw new UnauthorizedError("Failed to retrieve user information");
+  //     }
+
+  //     const userId = userResponse.data.data.user.id;
+
+  //     const progress = await this.questService.questRepository.getQuizProgressByUserId(
+  //       userId,
+  //       quizId
+  //     );
+
+  //     res.status(200).json({
+  //       status: true,
+  //       data: progress,
+  //       message: "Quiz progress retrieved successfully",
+  //     });
+  //   }
+  // );
 }

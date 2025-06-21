@@ -12,6 +12,14 @@ router.get("/tents/all", questController.fetchCampaignsViaAirLyft);
 router.get("/quests", questController.fetchAllQuests);
 router.get("/quests/:eventId", questController.fetchQuests);
 
+// Quiz Routes
+router.get("/quizzes/:quizId/details", questController.fetchQuizDetails);
+router.post(
+  "/quizzes/:quizId/questions/:questionId/answer",
+  questController.submitQuestionAnswer
+);
+// router.get("/quizzes/:quizId/progress", questController.getQuizProgress);
+
 // Connection Token Route
 router.get("/connection-token/:provider", questController.fetchConnectionToken);
 
@@ -25,8 +33,14 @@ router.get(
   "/stored-participation/:eventId",
   questController.getUserStoredParticipation
 );
-router.get("/user-participations/:userId", questController.getUserAllParticipations);
-router.get("/completed-quests-count/:userId", questController.getCompletedQuestsCount);
+router.get(
+  "/user-participations/:userId",
+  questController.getUserAllParticipations
+);
+router.get(
+  "/completed-quests-count/:userId",
+  questController.getCompletedQuestsCount
+);
 
 // Event Connections Routes
 router.get(
@@ -73,7 +87,5 @@ router.get(
 // Email OTP Routes
 router.post("/send-otp", questController.sendEmailOTP);
 router.post("/verify-otp", questController.verifyEmailOTP);
-
-
 
 export default router;

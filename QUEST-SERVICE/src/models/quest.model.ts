@@ -75,15 +75,6 @@ const questSchema = new Schema(
     },
     appType: {
       type: String,
-      // enum: [
-      //   "TWITTER",
-      //   "DISCORD",
-      //   "TELEGRAM",
-      //   "CUSTOM",
-      //   "INSTAGRAM",
-      //   "YOUTUBE",
-      //   "EMAIL",
-      // ],
       default: null,
     },
     taskType: {
@@ -145,6 +136,33 @@ const questSchema = new Schema(
   },
   { timestamps: true, versionKey: false }
 );
+
+// Virtual fields for quiz identification
+questSchema.virtual("isQuizParent").get(function () {
+  return (
+    this.taskType === "QUIZ_PLAY" &&
+    (this.parentId === null || this.parentId === undefined)
+  );
+});
+
+questSchema.virtual("isQuizQuestion").get(function () {
+  return this.taskType === "QUIZ_PLAY" && this.parentId !== null;
+});
+
+questSchema.virtual("questType").get(function () {
+  if (this.taskType === "QUIZ_PLAY") {
+    return this.parentId === null ? "QUIZ_PARENT" : "QUIZ_QUESTION";
+  }
+  return "REGULAR";
+});
+
+// Add indexes for quiz functionality
+questSchema.index({ parentId: 1 });
+questSchema.index({ taskType: 1, parentId: 1 });
+
+// Ensure virtuals are included in JSON output
+questSchema.set("toJSON", { virtuals: true });
+questSchema.set("toObject", { virtuals: true });
 
 const Quest = model("Quest", questSchema);
 export default Quest;

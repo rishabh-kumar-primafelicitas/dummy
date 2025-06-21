@@ -411,6 +411,8 @@ fragment QuizTaskDataFragment on QuizTaskData {
   options {
     text
     id
+    isCorrect
+    order
     __typename
   }
   __typename
@@ -846,7 +848,7 @@ mutation CreateEventConnection($eventId: ID!, $provider: AuthProvider!, $provide
   }
 }`;
 
-// Participation in tasks mutations
+// Mutation to participate in Twitter follow task
 export const PARTICIPATE_TWITTER_FOLLOW_TASK_MUTATION = `
 mutation ParticipateTwitterFollowTask($eventId: ID!, $taskId: ID!, $providerId: ID!) {
   participateTwitterFollowTask(
@@ -862,6 +864,7 @@ mutation ParticipateTwitterFollowTask($eventId: ID!, $taskId: ID!, $providerId: 
   }
 }`;
 
+// Mutation to participate in Discord join task
 export const PARTICIPATE_DISCORD_JOIN_TASK_MUTATION = `
 mutation ParticipateDiscordJoinTask($eventId: ID!, $providerId: ID!, $taskId: ID!) {
   participateDiscordJoinTask(eventId: $eventId, providerId: $providerId, taskId: $taskId) {
@@ -873,6 +876,7 @@ mutation ParticipateDiscordJoinTask($eventId: ID!, $providerId: ID!, $taskId: ID
   }
 }`;
 
+// Mutation to participate in link task
 export const PARTICIPATE_LINK_TASK_MUTATION = `
 mutation ParticipateLinkTask($eventId: ID!, $taskId: ID!) {
   participateLinkTask(eventId: $eventId, taskId: $taskId) {
@@ -894,6 +898,7 @@ query ConflictedUserProfile($provider: AuthProvider!, $providerId: ID!) {
   }
 }`;
 
+// Mutation to participate in email address task
 export const PARTICIPATE_EMAIL_ADDRESS_TASK_MUTATION = `
 mutation ParticipateEmailAddressTask($eventId: ID!, $taskId: ID!, $providerId: ID!) {
   participateEmailAddressTask(
@@ -908,3 +913,67 @@ mutation ParticipateEmailAddressTask($eventId: ID!, $taskId: ID!, $providerId: I
     __typename
   }
 }`;
+
+// Mutation to participate in quiz play task
+export const PARTICIPATE_QUIZ_PLAY_TASK_MUTATION = `
+mutation ParticipateQuizPlayTask($eventId: ID!, $taskId: ID!, $data: QuizTaskParticipationInput!) {
+  participateQuizPlayTask(eventId: $eventId, taskId: $taskId, data: $data) {
+    insertResult {
+      identifiers {
+        id
+        __typename
+      }
+      __typename
+    }
+    correctAnswers
+    points
+    xp
+    __typename
+  }
+}`;
+
+// Fetching questions by parent ID
+export const TASKS_BY_PARENT_ID_QUERY = `
+${TASK_INFO_FRAGMENTS}
+
+query TasksByParentId($parentId: ID!) {
+  pTasksByParentId(parentId: $parentId) {
+    id
+    order
+    points
+    title
+    description
+    iconUrl
+    appType
+    taskType
+    parentId
+    frequency
+    xp
+    appKey
+    taskKey
+    verify
+    subTaskStats {
+      count
+      totalPoints
+      totalXp
+      __typename
+    }
+    participantCount
+    guardConfig {
+      condition
+      rules {
+        intValue
+        stringValue
+        dateValue
+        ruleType
+        operator
+        __typename
+      }
+      __typename
+    }
+    ...TaskInfo
+    __typename
+  }
+}`;
+
+
